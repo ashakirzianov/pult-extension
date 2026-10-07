@@ -30,6 +30,11 @@ export default defineConfig({
       perf: "warn",
     },
     rules: {
+      // Pult's settings for Effect code: tagged unions, generator loops and scoped helpers.
+      "unicorn/consistent-function-scoping": "off",
+      "eslint/no-shadow": "off",
+      "eslint/no-await-in-loop": "off",
+      "eslint/no-underscore-dangle": "off",
       "eslint/no-restricted-imports": [
         "error",
         {
