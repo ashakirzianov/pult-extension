@@ -66,7 +66,7 @@ importers:
         version: 2.9.1
 
   extension:
-    dependencies:
+    devDependencies:
       '@t3tools/client-runtime':
         specifier: workspace:*
         version: link:../vendor/t3code/packages/client-runtime
@@ -76,10 +76,6 @@ importers:
       '@t3tools/shared':
         specifier: workspace:*
         version: link:../vendor/t3code/packages/shared
-      effect:
-        specifier: 4.0.1
-        version: 4.0.1(patch_hash=a33cba07c41f32374c2aaa86ea4a84d3ab9a872a78c94b65e929b19f8361856f)
-    devDependencies:
       '@types/vscode':
         specifier: 1.110.0
         version: 1.110.0
@@ -89,6 +85,9 @@ importers:
       '@vscode/vsce':
         specifier: 4.0.0
         version: 4.0.0
+      effect:
+        specifier: 4.0.1
+        version: 4.0.1(patch_hash=a33cba07c41f32374c2aaa86ea4a84d3ab9a872a78c94b65e929b19f8361856f)
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
