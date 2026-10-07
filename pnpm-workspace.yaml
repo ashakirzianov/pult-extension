@@ -3,6 +3,8 @@ packages:
   - vendor/t3code/packages/*
 
 allowBuilds:
+  # The headless load's Chromium (pnpm test:web), into Playwright's per-user cache.
+  "@playwright/browser-chromium": true
   # Marketplace signing; a local VSIX is not signed.
   "@vscode/vsce-sign": false
   esbuild: true

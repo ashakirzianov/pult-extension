@@ -8,5 +8,5 @@
     "lib": ["ESNext", "WebWorker"],
     "types": ["vscode"]
   },
-  "include": ["src"]
+  "include": ["src", "test"]
 }
