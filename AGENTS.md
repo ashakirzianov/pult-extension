@@ -24,7 +24,7 @@ The manifest declares only a `browser` entry, so desktop VS Code runs the extens
 ## The two ways to hurt yourself
 
 1. **Killing by pattern.** Never `pkill -f`, `pgrep | kill`, or `kill` a PID you found by matching a name, path or worktree string; your own agent process has this path in its argv, and this machine runs other VS Code windows and dev servers. Kill only a PID you captured at spawn.
-2. **The live server.** Anton's running T3 Code Extensible, home `~/.t3`, hosts the fleet, you included. Test against a server on an isolated home (`vp run dev` in `../pult` starts one against its worktree's `.t3`), never attach a development build to the live server without asking, and never open `~/.t3/userdata` read-write.
+2. **The live server.** Anton's running T3 Code Extensible, home `~/.t3`, hosts the fleet, you included. Test against a server on an isolated home: `T3CODE_DEV_ALLOWED_ORIGINS=vscode-file://vscode-app vp run dev` in `../pult` starts one against its worktree's `.t3`. The variable is there because a dev server accepts cross-origin HTTP only from the origins it names, and desktop VS Code runs the extension from `vscode-file://vscode-app`, which fetches a WebSocket ticket over HTTP before it connects. Never attach a development build to the live server without asking, and never open `~/.t3/userdata` read-write.
 
 ## Hit every surface
 
