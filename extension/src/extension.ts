@@ -1,15 +1,49 @@
 import * as vscode from "vscode";
 
-/** Runs when the Pult view opens or `pult.connect` is invoked, whichever comes first. */
-export function activate(context: vscode.ExtensionContext) {
+import { registerCommands } from "./commands.ts";
+import { EnvironmentCatalog, WindowBinding } from "./connection/catalog.ts";
+import { WindowConnection } from "./connection/service.ts";
+import { connectionStatusBar } from "./statusBar.ts";
+import { threadsView } from "./threadsView.ts";
+
+/** What `activate` returns; the headless load drives the connection through it. */
+export interface PultApi {
+  readonly connection: WindowConnection;
+}
+
+/**
+ * Runs once startup finishes, so a bound window reconnects silently, or earlier
+ * when the Pult view opens or a Pult command runs.
+ */
+export async function activate(context: vscode.ExtensionContext): Promise<PultApi> {
+  const catalog = new EnvironmentCatalog(context.globalState, context.secrets);
+  const binding = new WindowBinding(context.workspaceState);
+  const bound = binding.environmentId;
+  // Forgotten in another window while this one was closed.
+  if (bound !== undefined && catalog.profile(bound) === undefined) await binding.unbind();
+
+  const connection = new WindowConnection(catalog, binding);
+  const updateContext = () =>
+    vscode.commands.executeCommand("setContext", "pult.bound", connection.environment !== null);
+  void updateContext();
   context.subscriptions.push(
-    vscode.commands.registerCommand("pult.connect", () =>
-      vscode.window.showInformationMessage("Pult cannot connect to an environment yet."),
-    ),
-    // The view's welcome content, with its Connect button, shows while the tree is empty.
-    vscode.window.registerTreeDataProvider<never>("pult.threads", {
-      getChildren: () => [],
-      getTreeItem: (element) => element,
+    connection,
+    connectionStatusBar(connection),
+    threadsView(connection),
+    ...registerCommands(catalog, connection),
+    connection.onDidChange(updateContext),
+    // Another window forgot the bound environment, or paired it again.
+    context.secrets.onDidChange(async ({ key }) => {
+      const environmentId = catalog.credentialEnvironment(key);
+      if (environmentId === undefined || environmentId !== binding.environmentId) return;
+      if ((await catalog.credential(environmentId)) === undefined) {
+        const label = connection.environment?.label ?? environmentId;
+        await connection.disconnect();
+        void vscode.window.showInformationMessage(`Pult disconnected: ${label} was forgotten.`);
+      } else if (connection.environment?.phase === "blocked") {
+        await connection.retryNow();
+      }
     }),
   );
+  return { connection };
 }

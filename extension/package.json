@@ -43,6 +43,17 @@
         "title": "Connect to Environment",
         "category": "Pult",
         "icon": "$(plug)"
+      },
+      {
+        "command": "pult.disconnect",
+        "title": "Disconnect",
+        "category": "Pult",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "pult.forget",
+        "title": "Forget Environment",
+        "category": "Pult"
       }
     ],
     "viewsContainers": {
@@ -65,10 +76,34 @@
     "viewsWelcome": [
       {
         "view": "pult.threads",
-        "contents": "Pult is not connected to a T3 Code environment.\n[Connect](command:pult.connect)"
+        "contents": "Pult is not connected to a T3 Code environment.\n[Connect](command:pult.connect)",
+        "when": "!pult.bound"
       }
-    ]
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "pult.disconnect",
+          "when": "pult.bound"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "pult.connect",
+          "when": "view == pult.threads && !pult.bound",
+          "group": "navigation"
+        },
+        {
+          "command": "pult.disconnect",
+          "when": "view == pult.threads && pult.bound",
+          "group": "navigation"
+        }
+      ]
+    }
   },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.110.0"
