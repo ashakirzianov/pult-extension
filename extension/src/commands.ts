@@ -29,13 +29,19 @@ async function connect(catalog: EnvironmentCatalog, connection: WindowConnection
   if (bound !== null) {
     const retry = "Retry Now";
     const disconnect = "Disconnect";
+    const another =
+      "Disconnect to connect this window to another environment, or open another environment in a new window.";
     const choice = await vscode.window.showInformationMessage(
       `This window is connected to ${bound.label} (${bound.phase}).`,
       {
         modal: true,
-        detail: `${bound.error === null ? "" : `${bound.error}\n\n`}Disconnect to connect this window to another environment, or open another environment in a new window.`,
+        // An unsupported environment's error names its own way out.
+        detail: [bound.error, bound.unsupported ? null : another]
+          .filter((paragraph) => paragraph !== null)
+          .join("\n\n"),
       },
-      ...(bound.phase === "ready" ? [disconnect] : [retry, disconnect]),
+      // The registry never retries an unsupported environment.
+      ...(bound.phase === "ready" || bound.unsupported ? [disconnect] : [retry, disconnect]),
     );
     if (choice === retry) return connection.retryNow();
     if (choice !== disconnect) return;

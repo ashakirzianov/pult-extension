@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 
-import type { ConnectionPhase, WindowConnection } from "./connection/service.ts";
+import type { ConnectionPhase } from "./connection/presentation.ts";
+import type { WindowConnection } from "./connection/service.ts";
 
 const ICONS: Record<ConnectionPhase, string> = {
   connecting: "$(sync)",

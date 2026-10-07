@@ -1,19 +1,14 @@
 import {
   type BearerConnectionRegistration,
   Connection,
-  type ConnectionCatalogEntry,
   EnvironmentRegistry,
   EnvironmentSupervisor,
-  type PreparedConnection,
-  presentConnectionState,
-  type SupervisorConnectionState,
 } from "@t3tools/client-runtime/connection";
 import {
-  type EnvironmentShellState,
   makeEnvironmentShellState,
   ShellSnapshotLoader,
 } from "@t3tools/client-runtime/state/shell";
-import type { EnvironmentId, OrchestrationV2ShellSnapshot } from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -24,25 +19,8 @@ import * as vscode from "vscode";
 
 import { catalogLayer, type EnvironmentCatalog, type WindowBinding } from "./catalog.ts";
 import { platformLayer } from "./platform.ts";
+import { type BoundEnvironment, presentBoundEnvironment } from "./presentation.ts";
 import { probe, type ProbeInput } from "./probe.ts";
-
-export type ConnectionPhase = "connecting" | "ready" | "reconnecting" | "offline" | "blocked";
-
-/** The environment this window is bound to, as its connection stands. */
-export interface BoundEnvironment {
-  readonly environmentId: EnvironmentId;
-  readonly label: string;
-  readonly phase: ConnectionPhase;
-  /** Why the last attempt failed, while the connection is not ready. */
-  readonly error: string | null;
-  /** The projects and threads, once the first snapshot arrived. */
-  readonly shell: Option.Option<OrchestrationV2ShellSnapshot>;
-  /**
-   * The base URL and HTTP authorization of the live connection, for HTTP routes
-   * a socket does not carry, such as assets.
-   */
-  readonly prepared: Option.Option<PreparedConnection>;
-}
 
 /**
  * The window's one connection, owned by the extension host: the vendored
@@ -133,16 +111,18 @@ function followBoundEnvironment(publish: (next: BoundEnvironment | null) => void
   return Effect.gen(function* () {
     const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
     yield* SubscriptionRef.changes(registry.entries).pipe(
-      Stream.map((entries) => Option.fromUndefinedOr(entries.values().next().value)),
-      Stream.changesWith(
-        Option.makeEquivalence<ConnectionCatalogEntry>(
-          (left, right) => left.target.environmentId === right.target.environmentId,
-        ),
-      ),
+      Stream.map((entries) => Option.fromUndefinedOr(entries.keys().next().value)),
+      Stream.changes,
       Stream.switchMap(
         Option.match({
           onNone: () => Stream.succeed(null),
-          onSome: (entry) => registry.followStream(entry.target.environmentId, watch(entry)),
+          // Every change to the entry, a learned route included, restarts
+          // `followStream` and so this stream, with a fresh shell state: the view
+          // shows "Connecting…" until the snapshot reloads. Learned routes live in
+          // memory (`catalogLayer`), so this repeats after every activation.
+          // `pult/thread-tabs` will need a cache or a steadier source.
+          onSome: (environmentId) =>
+            registry.followStream(environmentId, watch(registry, environmentId)),
         }),
       ),
       Stream.runForEach((next) => Effect.sync(() => publish(next))),
@@ -150,49 +130,27 @@ function followBoundEnvironment(publish: (next: BoundEnvironment | null) => void
   });
 }
 
-function watch(entry: ConnectionCatalogEntry) {
+function watch(
+  registry: EnvironmentRegistry.EnvironmentRegistry["Service"],
+  environmentId: EnvironmentId,
+) {
   return Stream.unwrap(
     Effect.gen(function* () {
       const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
       const shell = yield* makeEnvironmentShellState();
       return Stream.zipLatestAll(
+        SubscriptionRef.changes(registry.entries).pipe(
+          Stream.map((entries) => entries.get(environmentId)),
+          Stream.filter((entry) => entry !== undefined),
+        ),
         SubscriptionRef.changes(supervisor.state),
         SubscriptionRef.changes(shell),
         SubscriptionRef.changes(supervisor.prepared),
-      ).pipe(Stream.map(([state, shell, prepared]) => present(entry, state, shell, prepared)));
+      ).pipe(
+        Stream.map(([entry, state, shell, prepared]) =>
+          presentBoundEnvironment(entry, state, shell.snapshot, prepared),
+        ),
+      );
     }),
   );
-}
-
-function present(
-  entry: ConnectionCatalogEntry,
-  state: SupervisorConnectionState,
-  shell: EnvironmentShellState,
-  prepared: Option.Option<PreparedConnection>,
-): BoundEnvironment {
-  const connection = presentConnectionState(state);
-  const phase: ConnectionPhase = (() => {
-    switch (connection.phase) {
-      case "connected":
-        return "ready";
-      case "available":
-      case "connecting":
-        return "connecting";
-      case "reconnecting":
-        return "reconnecting";
-      case "offline":
-        return "offline";
-      case "error":
-      case "unsupported":
-        return "blocked";
-    }
-  })();
-  return {
-    environmentId: entry.target.environmentId,
-    label: entry.target.label,
-    phase,
-    error: connection.error,
-    shell: shell.snapshot,
-    prepared,
-  };
 }

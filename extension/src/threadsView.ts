@@ -7,7 +7,8 @@ import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 import * as vscode from "vscode";
 
-import type { BoundEnvironment, WindowConnection } from "./connection/service.ts";
+import type { BoundEnvironment } from "./connection/presentation.ts";
+import type { WindowConnection } from "./connection/service.ts";
 
 type Node =
   | { readonly kind: "project"; readonly project: OrchestrationProjectShell }

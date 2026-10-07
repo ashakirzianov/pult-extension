@@ -5,7 +5,8 @@ import * as Option from "effect/Option";
 import * as vscode from "vscode";
 
 import type { PultApi } from "../src/extension.ts";
-import type { BoundEnvironment, WindowConnection } from "../src/connection/service.ts";
+import type { BoundEnvironment } from "../src/connection/presentation.ts";
+import type { WindowConnection } from "../src/connection/service.ts";
 
 declare const PULT_TEST_PAIRING_LINK: string;
 declare const PULT_TEST_RECONNECT: boolean;
