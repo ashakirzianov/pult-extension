@@ -1,0 +1,47 @@
+import "vite-plus/test/config";
+import { defineConfig } from "vite-plus";
+
+export default defineConfig({
+  test: {
+    environment: "node",
+    // The vendored packages' own tests are the fork's to run.
+    include: ["extension/src/**/*.test.ts", "scripts/**/*.test.ts"],
+  },
+  fmt: {
+    ignorePatterns: [
+      // The fork's files, kept byte for byte (scripts/vendor.ts).
+      "vendor/t3code/packages/**",
+      "vendor/t3code/patches/**",
+      // The decision log has a fixed entry shape, which formatting rewrites.
+      "DECISIONS.md",
+      "dist",
+      "release",
+      "node_modules",
+      "pnpm-lock.yaml",
+    ],
+    sortPackageJson: {},
+  },
+  lint: {
+    ignorePatterns: ["vendor/t3code/packages/**", "dist", "release", "node_modules"],
+    plugins: ["eslint", "oxc", "unicorn", "typescript"],
+    categories: {
+      correctness: "warn",
+      suspicious: "warn",
+      perf: "warn",
+    },
+    rules: {
+      "eslint/no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@t3tools/client-runtime",
+              message:
+                "Import from an explicit @t3tools/client-runtime/* subpath. The package has no root export.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+});

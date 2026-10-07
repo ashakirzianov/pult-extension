@@ -1,0 +1,8 @@
+node_modules/
+dist/
+release/
+.vscode-test-web/
+*.tsbuildinfo
+*.log
+.env
+.DS_Store
