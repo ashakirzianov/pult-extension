@@ -160,14 +160,16 @@ async function attach(
   }
 }
 
-function askToken(name: string) {
-  return vscode.window.showInputBox({
+/** The typed token, trimmed: a pasted one often carries a newline. */
+async function askToken(name: string) {
+  const token = await vscode.window.showInputBox({
     title: `Token for ${name}`,
     prompt: "A pairing code from `t3 pair`, or a session token from `t3 auth session issue`",
     password: true,
     ignoreFocusOut: true,
     validateInput: (text) => (text.trim() === "" ? "Enter the token." : undefined),
   });
+  return token?.trim();
 }
 
 /** Removes an environment's profile and credential; every window bound to it disconnects. */
