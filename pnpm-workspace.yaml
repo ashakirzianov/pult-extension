@@ -43,20 +43,32 @@ catalog:
   ws: 8.22.0
   yaml: ^2.9.0
 
+# T3 Code Extensible's overrides, package extensions and patches at the pin, kept
+# to the packages pnpm-lock.yaml installs and written by scripts/vendor.ts. The
+# patches are vendored; client-runtime uses the RPC client hook the effect patch adds.
 overrides:
-  # One Effect, the patched one: the vendored packages and the extension share its runtime.
-  effect: "catalog:"
-  # The patched @effect/vitest runs on Vite+'s test runner instead of its own vitest.
+  "@effect/platform-node": "catalog:"
+  "@effect/platform-node-shared": "catalog:"
+  "@effect/vitest": "catalog:"
   "@effect/vitest>vitest": "-"
+  "@types/node": "catalog:"
+  effect: "catalog:"
+  lightningcss: "catalog:"
+  # Ranges from @effect/platform-node, jsdom, unifont, Expo and libsql otherwise
+  # settle on two patch releases of each major. Older majors stay as they are.
+  "undici@^8": "catalog:"
+  "ws@^8": "catalog:"
   vite: "catalog:"
   vite-plus: "catalog:"
+  yaml: "catalog:"
 
 packageExtensions:
+  # Our patch makes @effect/vitest import vite-plus/test. A catalog: spec here
+  # resolves through the vite-plus override above.
   "@effect/vitest@*":
     dependencies:
       vite-plus: "catalog:"
 
-# The fork's patches, vendored with the packages that rely on them (scripts/vendor.ts).
 patchedDependencies:
   "@effect/vitest@4.0.1": vendor/t3code/patches/@effect__vitest@4.0.1.patch
   effect@4.0.1: vendor/t3code/patches/effect@4.0.1.patch

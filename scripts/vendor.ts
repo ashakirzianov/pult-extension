@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Vendors the protocol packages from T3 Code Extensible at the commit pinned in
 // vendor/t3code/PIN, Pult's pin: packages/{contracts,client-runtime,shared} land
-// verbatim in vendor/t3code/packages/, the fork's patches they rely on in
-// vendor/t3code/patches/, the fork's `catalog:` block replaces this repo's in
-// pnpm-workspace.yaml, and vendor/t3code/COMMIT records the full hash.
+// verbatim in vendor/t3code/packages/, and vendor/t3code/COMMIT records the full
+// hash. pnpm-workspace.yaml takes the fork's `catalog:` block whole, and its
+// `overrides:`, `packageExtensions:` and `patchedDependencies:` blocks kept to
+// the packages pnpm-lock.yaml installs, the patches vendored in
+// vendor/t3code/patches/. A bump that brings in a package one of them names
+// needs a second sync after `pnpm i`; `pnpm vendor:check` says so.
 // The checkout is PULT_T3CODE_CHECKOUT (environment or .env), by default
 // ~/repos/t3code-extensible; the pin is read from a temporary worktree of it,
 // so the checkout's own branch and working tree are never touched.
@@ -22,22 +25,19 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as YAML from "yaml";
 
 import { t3codeCheckoutPath } from "./checkout.ts";
 
 const VENDORED_PACKAGES = ["contracts", "client-runtime", "shared"] as const;
-// The fork's patches to dependencies the vendored code relies on: client-runtime
-// uses the RPC client's `onPingTimeout` hook that the effect patch adds. A bump
-// that renames one fails the checkout; rename it here and in pnpm-workspace.yaml.
-const VENDORED_PATCHES = ["effect@4.0.1.patch", "@effect__vitest@4.0.1.patch"] as const;
 const VENDOR_DIR = "vendor/t3code";
 // Every vendored file sits under one of these, on both sides.
 const VENDORED_DIRS = ["packages", "patches"] as const;
-const VENDORED_PATHS = [
-  ...VENDORED_PACKAGES.map((name) => `packages/${name}`),
-  ...VENDORED_PATCHES.map((name) => `patches/${name}`),
-];
-const PINNED_PATHS = [...VENDORED_PATHS, "pnpm-workspace.yaml"];
+const PACKAGE_PATHS = VENDORED_PACKAGES.map((name) => `packages/${name}`);
+const PINNED_PATHS = [...PACKAGE_PATHS, "patches", "pnpm-workspace.yaml"];
+// The pnpm-workspace.yaml blocks that are the fork's.
+const PINNED_BLOCKS = ["catalog", "overrides", "packageExtensions", "patchedDependencies"] as const;
+type PinnedBlock = (typeof PINNED_BLOCKS)[number];
 
 export class VendorError extends Schema.TaggedError<VendorError>()("VendorError", {
   detail: Schema.String,
@@ -53,12 +53,12 @@ export function parsePin(text: string): string | undefined {
   return /^[0-9a-f]{7,40}$/i.test(pin) ? pin.toLowerCase() : undefined;
 }
 
-// A top-level `catalog:` key and every line under it: indented lines, and
-// blank lines followed by more of them.
-const findCatalogBlock = (yaml: string) => {
+// A top-level `<key>:` block: the key line and every line under it, that is
+// indented lines, and blank lines followed by more of them.
+const findBlock = (yaml: string, key: string) => {
   const lines = yaml.split("\n");
-  const start = lines.findIndex((line) => /^catalog:\s*$/.test(line));
-  if (start === -1) return undefined;
+  const start = lines.findIndex((line) => line.trimEnd() === `${key}:`);
+  if (start === -1) return { lines, start, end: start };
   let end = start + 1;
   for (let index = start + 1; index < lines.length; index += 1) {
     const line = lines[index]!;
@@ -68,18 +68,134 @@ const findCatalogBlock = (yaml: string) => {
   return { lines, start, end };
 };
 
-export function extractCatalogBlock(yaml: string): string | undefined {
-  const block = findCatalogBlock(yaml);
-  return block && block.lines.slice(block.start, block.end).join("\n");
+export function extractBlock(yaml: string, key: string): string | undefined {
+  const { lines, start, end } = findBlock(yaml, key);
+  return start === -1 ? undefined : lines.slice(start, end).join("\n");
 }
 
-/** This repo's pnpm-workspace.yaml with its `catalog:` block replaced by the fork's. */
-export function replaceCatalogBlock(target: string, source: string): string | undefined {
-  const sourceBlock = extractCatalogBlock(source);
-  const block = findCatalogBlock(target);
-  if (sourceBlock === undefined || block === undefined) return undefined;
-  return [...block.lines.slice(0, block.start), sourceBlock, ...block.lines.slice(block.end)].join(
-    "\n",
+/** `yaml` with its `key` block replaced by `block`, appended if it has none, removed if `block` is undefined. */
+export function replaceBlock(yaml: string, key: string, block: string | undefined): string {
+  const { lines, start, end } = findBlock(yaml, key);
+  if (start !== -1) {
+    return [
+      ...lines.slice(0, start),
+      ...(block === undefined ? [] : [block]),
+      ...lines.slice(end),
+    ].join("\n");
+  }
+  return block === undefined ? yaml : `${yaml.trimEnd()}\n\n${block}\n`;
+}
+
+const entryKey = (line: string) => {
+  const match = /^\s*(?:"([^"]*)"|'([^']*)'|([^:]+?))\s*:(?:\s|$)/.exec(line);
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? line.trim();
+};
+
+const indentOf = (line: string) => line.length - line.trimStart().length;
+const isComment = (line: string) => line.trimStart().startsWith("#");
+
+// A block's entries: each line at the entries' indentation starts one, with the
+// comments right above it and the lines indented under it. Blank lines are dropped.
+const blockEntries = (block: string) => {
+  const lines = block
+    .split("\n")
+    .slice(1)
+    .filter((line) => line.trim() !== "");
+  const first = lines.find((line) => !isComment(line));
+  const indent = first === undefined ? 0 : indentOf(first);
+  const entries: Array<{ key: string; lines: Array<string> }> = [];
+  let comments: Array<string> = [];
+  for (const line of lines) {
+    if (indentOf(line) > indent) entries.at(-1)?.lines.push(line);
+    else if (isComment(line)) comments.push(line);
+    else {
+      entries.push({ key: entryKey(line), lines: [...comments, line] });
+      comments = [];
+    }
+  }
+  return entries;
+};
+
+/** The package a selector names first: `a` in `a>b`, `name` in `name@range`. */
+export const selectedPackage = (selector: string) =>
+  selector.split(">", 1)[0]!.replace(/(?<=.)@.*$/, "");
+
+const Dependencies = Schema.optional(Schema.Record(Schema.String, Schema.Unknown));
+// An importer's dependencies, or a snapshot's; snapshots carry no devDependencies.
+const DependencyMaps = Schema.Struct({
+  dependencies: Dependencies,
+  devDependencies: Dependencies,
+  optionalDependencies: Dependencies,
+});
+const Lockfile = Schema.Struct({
+  importers: Schema.optional(Schema.Record(Schema.String, DependencyMaps)),
+  packages: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  snapshots: Schema.optional(Schema.Record(Schema.String, DependencyMaps)),
+});
+
+/** Every package pnpm-lock.yaml installs, by its name and by any alias it is installed as. */
+export function installedPackages(lockfile: string): ReadonlySet<string> {
+  const {
+    importers = {},
+    packages = {},
+    snapshots = {},
+  } = Schema.decodeUnknownSync(Lockfile)(YAML.parse(lockfile));
+  const names = new Set(Object.keys(packages).map(selectedPackage));
+  for (const { dependencies = {}, devDependencies = {}, optionalDependencies = {} } of [
+    ...Object.values(importers),
+    ...Object.values(snapshots),
+  ]) {
+    for (const name of Object.keys({
+      ...dependencies,
+      ...devDependencies,
+      ...optionalDependencies,
+    })) {
+      names.add(name);
+    }
+  }
+  return names;
+}
+
+/**
+ * The fork's pnpm-workspace.yaml blocks as this repo carries them: the catalog
+ * whole; the overrides, package extensions and patches for the packages in
+ * `installed`, the patches at their vendored paths. `patches` are the fork's
+ * patch files to vendor. An empty block is undefined.
+ */
+export function pinnedWorkspace(forkWorkspace: string, installed: ReadonlySet<string>) {
+  const patches: Array<string> = [];
+  const keep = (key: Exclude<PinnedBlock, "catalog">, rewrite = (line: string) => line) => {
+    const block = extractBlock(forkWorkspace, key);
+    const entries = (block === undefined ? [] : blockEntries(block)).filter((entry) =>
+      installed.has(selectedPackage(entry.key)),
+    );
+    if (entries.length === 0) return undefined;
+    return [`${key}:`, ...entries.flatMap((entry) => entry.lines.map(rewrite))].join("\n");
+  };
+  const blocks: Record<PinnedBlock, string | undefined> = {
+    catalog: extractBlock(forkWorkspace, "catalog"),
+    overrides: keep("overrides"),
+    packageExtensions: keep("packageExtensions"),
+    patchedDependencies: keep("patchedDependencies", (line) =>
+      line.replace(
+        /^(\s*(?:"[^"]*"|'[^']*'|[^\s#"'][^:]*?)\s*:\s*)(["']?)([^"'\s#]+)\2/,
+        (_, prefix: string, quote: string, file: string) => {
+          patches.push(file);
+          return `${prefix}${quote}${VENDOR_DIR}/${file}${quote}`;
+        },
+      ),
+    ),
+  };
+  return { blocks, patches };
+}
+
+/** The blocks of this repo's pnpm-workspace.yaml that differ from `blocks`, one line each. */
+export function workspaceDrift(
+  workspace: string,
+  blocks: Record<PinnedBlock, string | undefined>,
+): Array<string> {
+  return PINNED_BLOCKS.filter((key) => extractBlock(workspace, key) !== blocks[key]).map(
+    (key) => `changed   pnpm-workspace.yaml ${key}`,
   );
 }
 
@@ -160,16 +276,30 @@ const pinnedTree = Effect.fn("pinnedTree")(function* (checkout: string, pin: str
 
 const listFiles = (output: string) => output.split("\0").filter((file) => file.length > 0);
 
+/** The fork at the pin as this repo vendors it: the files, and the pnpm-workspace.yaml blocks. */
+const pinnedSource = Effect.fn("pinnedSource")(function* (root: string, checkout: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const { tree, commit } = yield* pinnedTree(checkout, yield* readPin(root));
+  const { blocks, patches } = pinnedWorkspace(
+    yield* fs.readFileString(path.join(tree, "pnpm-workspace.yaml")),
+    installedPackages(yield* fs.readFileString(path.join(root, "pnpm-lock.yaml"))),
+  );
+  const files = listFiles(yield* git(tree, ["ls-files", "-z", "--", ...PACKAGE_PATHS, ...patches]));
+  return { tree, commit, files, blocks };
+});
+
 const sameBytes = (left: Uint8Array, right: Uint8Array) =>
   left.length === right.length && left.every((byte, index) => byte === right[index]);
 
-/** Every difference between the vendored tree and the pinned fork, one line each. */
-const findDrift = Effect.fn("findDrift")(function* (root: string, tree: string, commit: string) {
+/** The vendored tree's drift from the pin, one line each; empty when it matches. */
+export const checkVendored = Effect.fn("checkVendored")(function* (checkout: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const root = yield* repoRoot;
+  const { tree, commit, files, blocks } = yield* pinnedSource(root, checkout);
   const drift: Array<string> = [];
 
-  const upstream = listFiles(yield* git(tree, ["ls-files", "-z", "--", ...VENDORED_PATHS]));
   // This repo's side as git would commit it: tracked and untracked files, minus ignored ones.
   const vendored = new Set(
     listFiles(
@@ -184,7 +314,7 @@ const findDrift = Effect.fn("findDrift")(function* (root: string, tree: string, 
       ]),
     ).map((file) => file.slice(VENDOR_DIR.length + 1)),
   );
-  for (const file of upstream) {
+  for (const file of files) {
     const local = path.join(root, VENDOR_DIR, file);
     if (!vendored.delete(file) || !(yield* fs.exists(local))) {
       drift.push(`missing   ${VENDOR_DIR}/${file}`);
@@ -194,11 +324,9 @@ const findDrift = Effect.fn("findDrift")(function* (root: string, tree: string, 
   }
   for (const file of vendored) drift.push(`extra     ${VENDOR_DIR}/${file}`);
 
-  const workspace = yield* fs.readFileString(path.join(root, "pnpm-workspace.yaml"));
-  const forkWorkspace = yield* fs.readFileString(path.join(tree, "pnpm-workspace.yaml"));
-  if (extractCatalogBlock(workspace) !== extractCatalogBlock(forkWorkspace)) {
-    drift.push("changed   pnpm-workspace.yaml catalog");
-  }
+  drift.push(
+    ...workspaceDrift(yield* fs.readFileString(path.join(root, "pnpm-workspace.yaml")), blocks),
+  );
 
   const commitFile = path.join(root, VENDOR_DIR, "COMMIT");
   const recorded = (yield* fs.exists(commitFile))
@@ -206,11 +334,13 @@ const findDrift = Effect.fn("findDrift")(function* (root: string, tree: string, 
     : "";
   if (recorded !== commit) drift.push(`changed   ${VENDOR_DIR}/COMMIT (want ${commit})`);
   return drift;
-});
+}, Effect.scoped);
 
-const sync = Effect.fn("sync")(function* (root: string, tree: string, commit: string) {
+const sync = Effect.fn("sync")(function* (checkout: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const root = yield* repoRoot;
+  const { tree, commit, files, blocks } = yield* pinnedSource(root, checkout);
   const target = path.join(root, VENDOR_DIR, "packages");
 
   for (const name of VENDORED_PACKAGES) {
@@ -223,7 +353,6 @@ const sync = Effect.fn("sync")(function* (root: string, tree: string, commit: st
     }
   }
   yield* fs.remove(path.join(root, VENDOR_DIR, "patches"), { recursive: true, force: true });
-  const files = listFiles(yield* git(tree, ["ls-files", "-z", "--", ...VENDORED_PATHS]));
   for (const file of files) {
     const destination = path.join(root, VENDOR_DIR, file);
     yield* fs.makeDirectory(path.dirname(destination), { recursive: true });
@@ -231,25 +360,15 @@ const sync = Effect.fn("sync")(function* (root: string, tree: string, commit: st
   }
 
   const workspaceFile = path.join(root, "pnpm-workspace.yaml");
-  const workspace = replaceCatalogBlock(
-    yield* fs.readFileString(workspaceFile),
-    yield* fs.readFileString(path.join(tree, "pnpm-workspace.yaml")),
+  yield* fs.writeFileString(
+    workspaceFile,
+    PINNED_BLOCKS.reduce(
+      (workspace, key) => replaceBlock(workspace, key, blocks[key]),
+      yield* fs.readFileString(workspaceFile),
+    ),
   );
-  if (workspace === undefined) {
-    return yield* new VendorError({
-      detail: "This repo's or the fork's pnpm-workspace.yaml has no top-level catalog: block.",
-    });
-  }
-  yield* fs.writeFileString(workspaceFile, workspace);
   yield* fs.writeFileString(path.join(root, VENDOR_DIR, "COMMIT"), `${commit}\n`);
-  return files.length;
-});
-
-/** The vendored tree's drift from the pin; empty when it matches. */
-export const checkVendored = Effect.fn("checkVendored")(function* (checkout: string) {
-  const root = yield* repoRoot;
-  const { tree, commit } = yield* pinnedTree(checkout, yield* readPin(root));
-  return yield* findDrift(root, tree, commit);
+  return { count: files.length, commit };
 }, Effect.scoped);
 
 const vendor = Command.make(
@@ -267,19 +386,17 @@ const vendor = Command.make(
         const drift = yield* checkVendored(checkout);
         if (drift.length > 0) {
           return yield* new VendorError({
-            detail: `The vendored tree differs from the pin; run pnpm vendor:sync.\n${drift.join("\n")}`,
+            detail: `The vendored tree differs from the pin; run pnpm vendor:sync, then pnpm i.\n${drift.join("\n")}`,
           });
         }
         yield* Effect.log(`${VENDOR_DIR} matches the pin.`);
         return;
       }
-      const root = yield* repoRoot;
-      const { tree, commit } = yield* pinnedTree(checkout, yield* readPin(root));
-      const count = yield* sync(root, tree, commit);
+      const { count, commit } = yield* sync(checkout);
       yield* Effect.log(
-        `Vendored ${count} files from ${checkout} at ${commit}. Run pnpm i if the catalog or a manifest changed.`,
+        `Vendored ${count} files from ${checkout} at ${commit}. Run pnpm i, then pnpm vendor:check.`,
       );
-    }).pipe(Effect.scoped),
+    }),
 ).pipe(Command.withDescription("Vendor the protocol packages from T3 Code Extensible at the pin."));
 
 if (import.meta.main) {

@@ -14,7 +14,7 @@ The extension attaches to a running T3 Code server over its WebSocket and HTTP p
 ## Where code lives
 
 - `extension/` - the extension: the manifest (`package.json`, whose `contributes` are the commands, the Activity Bar container and its views), `src/extension.ts` as the entry, `media/`. esbuild bundles it into `dist/web/extension.js`.
-- `vendor/t3code/packages` - `contracts`, `client-runtime`, `shared`; `vendor/t3code/patches` - the fork's patches to `effect` and `@effect/vitest`, applied through `pnpm-workspace.yaml`. Read them, never edit them. Import `client-runtime` by subpath; it has no root export.
+- `vendor/t3code/packages` - `contracts`, `client-runtime`, `shared`; `vendor/t3code/patches` - the fork's patches to the packages this repo installs, applied through `pnpm-workspace.yaml`, whose `catalog`, `overrides`, `packageExtensions` and `patchedDependencies` blocks `vendor.ts` writes from the fork's. Read them, never edit them. Import `client-runtime` by subpath; it has no root export.
 - `scripts/` - `vendor.ts` and its test.
 
 ## A web extension
