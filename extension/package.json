@@ -1,0 +1,75 @@
+{
+  "name": "pult",
+  "displayName": "Pult",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Pult's client for T3 Code: agent threads in the editor.",
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ashakirzianov/pult-extension.git"
+  },
+  "publisher": "pult",
+  "browser": "./dist/web/extension.js",
+  "scripts": {
+    "bundle": "esbuild src/extension.ts --bundle --platform=browser --format=cjs --target=es2022 --external:vscode --outfile=dist/web/extension.js",
+    "build": "pnpm run bundle --sourcemap",
+    "watch": "pnpm run bundle --sourcemap --watch",
+    "vscode:prepublish": "pnpm run bundle --minify",
+    "package": "mkdir -p ../release && vsce package --no-dependencies --out ../release/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@t3tools/client-runtime": "workspace:*",
+    "@t3tools/contracts": "workspace:*",
+    "@t3tools/shared": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/vscode": "1.110.0",
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.28.2",
+    "typescript": "catalog:"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "pult.connect",
+        "title": "Connect to Environment",
+        "category": "Pult",
+        "icon": "$(plug)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "pult",
+          "title": "Pult",
+          "icon": "media/pult.svg"
+        }
+      ]
+    },
+    "views": {
+      "pult": [
+        {
+          "id": "pult.threads",
+          "name": "Threads"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "pult.threads",
+        "contents": "Pult is not connected to a T3 Code environment.\n[Connect](command:pult.connect)"
+      }
+    ]
+  },
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.110.0"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Desktop VS Code running the extension in its web worker extension host, as VS Code for the Web does.
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "debugWebWorkerHost": true,
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/extension",
+        "--extensionDevelopmentKind=web"
+      ],
+      "outFiles": ["${workspaceFolder}/extension/dist/web/**/*.js"],
+      "preLaunchTask": "build"
+    }
+  ]
+}

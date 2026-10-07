@@ -3,6 +3,8 @@ packages:
   - vendor/t3code/packages/*
 
 allowBuilds:
+  # Marketplace signing; a local VSIX is not signed.
+  "@vscode/vsce-sign": false
   esbuild: true
 
 # T3 Code Extensible's catalog at the pin, written by scripts/vendor.ts.

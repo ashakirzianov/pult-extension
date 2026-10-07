@@ -1,0 +1,6 @@
+# The VSIX carries the manifest, the bundle, the media and the licence; nothing else.
+**
+!dist/web/extension.js
+!media/**
+!LICENSE
+!README.md

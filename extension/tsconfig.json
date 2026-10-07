@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // esbuild bundles the source, so resolve as a bundler does.
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    // The web worker extension host: no DOM, no Node.
+    "lib": ["ESNext", "WebWorker"],
+    "types": ["vscode"]
+  },
+  "include": ["src"]
+}
