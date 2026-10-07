@@ -21,8 +21,6 @@
     "watch": "pnpm run bundle --sourcemap --watch",
     "vscode:prepublish": "pnpm run bundle --minify",
     "package": "mkdir -p ../release && vsce package --no-dependencies --out ../release/",
-    "bundle:load": "esbuild test/load.ts --bundle --platform=browser --format=cjs --target=es2022 --external:vscode --outfile=dist/web/test/load.js",
-    "test:web": "pnpm run build && pnpm run bundle:load && vscode-test-web --browserType=chromium --headless --quality=stable --port=3917 --extensionDevelopmentPath=. --extensionTestsPath=dist/web/test/load.js",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

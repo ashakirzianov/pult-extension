@@ -15,7 +15,7 @@ The extension attaches to a running T3 Code server over its WebSocket and HTTP p
 
 - `extension/` - the extension: the manifest (`package.json`, whose `contributes` are the commands, the Activity Bar container and its views), `src/extension.ts` as the entry, `media/`, and `test/load.ts`, the headless load. esbuild bundles it into `dist/web/extension.js`.
 - `vendor/t3code/packages` - `contracts`, `client-runtime`, `shared`; `vendor/t3code/patches` - the fork's patches to the packages this repo installs, applied through `pnpm-workspace.yaml`, whose `catalog`, `overrides`, `packageExtensions` and `patchedDependencies` blocks `vendor.ts` writes from the fork's. Read them, never edit them. Import `client-runtime` by subpath; it has no root export.
-- `scripts/` - `vendor.ts` and its test.
+- `scripts/` - `vendor.ts` and its test, and `testWeb.ts`, the headless load's runner.
 
 ## A web extension
 
@@ -41,7 +41,7 @@ The most common defect is a change that works on the path you tested and is miss
 
 - `pnpm i` installs; `pnpm typecheck`, `pnpm lint`, `pnpm fmt:check`, `pnpm test` and `pnpm vendor:check` are the checks; `pnpm package` writes the VSIX to `release/`.
 - Vitest for pure logic, next to the code as `*.test.ts`; no UI tests. Do not add tests that merely mirror the implementation. A test that needs a timeout or a sleep to pass is wrong.
-- `pnpm test:web` is the headless load: `@vscode/test-web` opens VS Code for the Web in Playwright's headless Chromium on port 3917, runs `extension/test/load.ts` in the web worker extension host beside the extension, and fails unless the extension activates and registers its commands. The first run downloads VS Code into `extension/.vscode-test-web/`.
+- `pnpm test:web` is the headless load: `@vscode/test-web` opens VS Code for the Web in Playwright's headless Chromium on port 3917, runs `extension/test/load.ts` in the web worker extension host beside the extension, and fails unless the extension activates and registers its commands. The first run downloads VS Code into `extension/.vscode-test-web/`. With `PULT_TEST_PAIRING_LINK`, a pairing link or `<server>/#token=<token>` (a session token from `t3 auth session issue` survives reruns), it also connects to that server, waits for its projects, and disconnects; `PULT_TEST_RECONNECT=1` then also waits, while you restart the server, for the connection to drop and come back.
 - A user-visible change gets one pass in a real VS Code, F5 (`.vscode/launch.json`), by the primary agent after integrating, with Anton's permission before any browser or computer use. Subagents do not launch their own.
 
 ## Documentation
