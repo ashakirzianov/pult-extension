@@ -13,7 +13,7 @@ The extension attaches to a running T3 Code server over its WebSocket and HTTP p
 
 ## Where code lives
 
-- `extension/` - the extension: the manifest (`package.json`, whose `contributes` are the commands, the Activity Bar container and its views), `src/extension.ts` as the entry, `media/`, and `test/load.ts`, the headless load. esbuild bundles it into `dist/web/extension.js`.
+- `extension/` - the extension: the manifest (`package.json`, whose `contributes` are the commands, the Activity Bar container and its views), `src/extension.ts` as the entry, `src/connection/` the window's connection (the environment catalog and the window binding, the HTTP probe, the vendored runtime's platform layer and the service over it), `media/`, and `test/load.ts`, the headless load. esbuild bundles it into `dist/web/extension.js`.
 - `vendor/t3code/packages` - `contracts`, `client-runtime`, `shared`; `vendor/t3code/patches` - the fork's patches to the packages this repo installs, applied through `pnpm-workspace.yaml`, whose `catalog`, `overrides`, `packageExtensions` and `patchedDependencies` blocks `vendor.ts` writes from the fork's. Read them, never edit them. Import `client-runtime` by subpath; it has no root export.
 - `scripts/` - `vendor.ts` and its test, and `testWeb.ts`, the headless load's runner.
 
@@ -24,7 +24,7 @@ The manifest declares only a `browser` entry, so desktop VS Code runs the extens
 ## The two ways to hurt yourself
 
 1. **Killing by pattern.** Never `pkill -f`, `pgrep | kill`, or `kill` a PID you found by matching a name, path or worktree string; your own agent process has this path in its argv, and this machine runs other VS Code windows and dev servers. Kill only a PID you captured at spawn.
-2. **The live server.** Anton's running T3 Code Extensible, home `~/.t3`, hosts the fleet, you included. Test against a server on an isolated home: `T3CODE_DEV_ALLOWED_ORIGINS=vscode-file://vscode-app vp run dev` in `../pult` starts one against its worktree's `.t3`. The variable is there because a dev server accepts cross-origin HTTP only from the origins it names, and desktop VS Code runs the extension from `vscode-file://vscode-app`, which fetches a WebSocket ticket over HTTP before it connects. Never attach a development build to the live server without asking, and never open `~/.t3/userdata` read-write.
+2. **The live server.** Anton's running T3 Code Extensible, home `~/.t3`, hosts the fleet, you included. Test against a server on an isolated home: `T3CODE_DEV_ALLOWED_ORIGINS=vscode-file://vscode-app vp run dev` in a Pult worktree starts one against that worktree's `.t3`; the main checkout is no worktree and would use `~/.pult`, so add `--home-dir <dir>` there. The variable is there because a dev server accepts cross-origin HTTP only from the origins it names, and desktop VS Code runs the extension from `vscode-file://vscode-app`, which fetches a WebSocket ticket over HTTP before it connects. Desktop VS Code pairs with the server port (the `[dev-runner]` line's `serverPort`) and a token: the pairing link names the web port, whose Vite answers preflights itself and admits only localhost origins. VS Code for the Web's extension host runs at a `v--<hash>.localhost` origin that changes with the browser profile, which the web port admits and no fixed variable could name. Never attach a development build to the live server without asking, and never open `~/.t3/userdata` read-write.
 
 ## Hit every surface
 
