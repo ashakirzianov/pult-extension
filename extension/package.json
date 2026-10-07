@@ -16,7 +16,7 @@
   "publisher": "pult",
   "browser": "./dist/web/extension.js",
   "scripts": {
-    "bundle": "esbuild src/extension.ts --bundle --platform=browser --format=cjs --target=es2022 --external:vscode --outfile=dist/web/extension.js",
+    "bundle": "esbuild src/extension.ts --bundle --platform=browser --format=cjs --target=es2022 --external:vscode --define:globalThis.location=undefined --outfile=dist/web/extension.js",
     "build": "pnpm run bundle --sourcemap",
     "watch": "pnpm run bundle --sourcemap --watch",
     "vscode:prepublish": "pnpm run bundle --minify",

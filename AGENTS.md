@@ -19,7 +19,7 @@ The extension attaches to a running T3 Code server over its WebSocket and HTTP p
 
 ## A web extension
 
-The manifest declares only a `browser` entry, so desktop VS Code runs the extension in its web worker extension host, and the same bundle runs in VS Code for the Web. There is no Node: no `node:` imports, no `process`, no child processes or raw sockets; the network is `fetch` and `WebSocket`. The bundle targets `--platform=browser` and the tsconfig carries only the `WebWorker` lib, so a Node import fails both. This is why SSH and Tailscale connections, which the Pult desktop has, are not here. A UX that needs Node is Anton's call (RFC 1: "the day a concrete UX needs Node, web goes"), not a workaround.
+The manifest declares only a `browser` entry, so desktop VS Code runs the extension in its web worker extension host, and the same bundle runs in VS Code for the Web. There is no Node: no `node:` imports, no `process`, no child processes or raw sockets; the network is `fetch` and `WebSocket`. The bundle targets `--platform=browser` and the tsconfig carries only the `WebWorker` lib, so a Node import fails both. This is why SSH and Tailscale connections, which the Pult desktop has, are not here. The bundle defines `globalThis.location` as `undefined`: Effect's HTTP client resolves every URL against `location`, which in a worker started from a `blob:` URL, as the extension host is, is no base URL, so every request would fail before it is sent. A UX that needs Node is Anton's call (RFC 1: "the day a concrete UX needs Node, web goes"), not a workaround.
 
 ## The two ways to hurt yourself
 

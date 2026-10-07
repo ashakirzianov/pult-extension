@@ -17,3 +17,6 @@ What the code cannot say about itself: decisions in force, grouped by area.
 
 ### credential-store
 **The extension pairs with an environment itself, and keeps the bearer in `SecretStorage` keyed by environment id, shared by every window bound to that environment.** 2026-10-07. Each client is its own session, so the extension never reads the Pult desktop's credential; `SecretStorage` is encrypted on desktop and scoped per browser profile on the web, and keying by environment makes pairing a once-per-environment act. Anton's ruling. *Rejected:* the credential in `workspaceState`; the server URL as a setting. *See:* `pult/vscode-connect`.
+
+### connection-owner
+**The extension host owns the one WebSocket per window and connects only after an HTTP probe (the environment descriptor, then a WebSocket ticket) succeeds; webviews get state by `postMessage`.** 2026-10-07. Webviews are a separate origin under a CSP and the ticket call is cross-origin, so a webview-owned connection would fail on exactly the servers that restrict origins, and a WebSocket-only probe hides that failure since the upgrade has no origin check. *Rejected:* a connection per webview; a bare WebSocket probe. *See:* `pult/vscode-connect`.
