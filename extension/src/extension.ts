@@ -2,20 +2,27 @@ import * as vscode from "vscode";
 
 import { registerCommands } from "./commands.ts";
 import { EnvironmentCatalog, WindowBinding } from "./connection/catalog.ts";
+import type { BoundEnvironment } from "./connection/presentation.ts";
 import { WindowConnection } from "./connection/service.ts";
 import { connectionStatusBar } from "./statusBar.ts";
 import { threadsView } from "./threadsView.ts";
 
-/** What `activate` returns; the headless load drives the connection through it. */
-export interface PultApi {
-  readonly connection: WindowConnection;
+/**
+ * What `activate` returns outside production, for the headless load to watch
+ * the connection: the bound environment without its credential. An installed
+ * Pult exports nothing, since every extension can read another's exports.
+ */
+export interface PultTestApi {
+  readonly environment: Omit<BoundEnvironment, "prepared"> | null;
+  readonly onDidChange: vscode.Event<void>;
 }
 
 /**
  * Runs once startup finishes, so a bound window reconnects silently, or earlier
  * when the Pult view opens or a Pult command runs.
  */
-export async function activate(context: vscode.ExtensionContext): Promise<PultApi> {
+export async function activate(context: vscode.ExtensionContext): Promise<PultTestApi | undefined> {
+  const development = context.extensionMode !== vscode.ExtensionMode.Production;
   const catalog = new EnvironmentCatalog(context.globalState, context.secrets);
   const binding = new WindowBinding(context.workspaceState);
   const bound = binding.environmentId;
@@ -30,7 +37,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultAp
     connection,
     connectionStatusBar(connection),
     threadsView(connection),
-    ...registerCommands(catalog, connection),
+    ...registerCommands(catalog, connection, development),
     connection.onDidChange(updateContext),
     // Another window forgot the bound environment, or paired it again.
     context.secrets.onDidChange(async ({ key }) => {
@@ -45,5 +52,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultAp
       }
     }),
   );
-  return { connection };
+  return development ? testApi(connection) : undefined;
+}
+
+function testApi(connection: WindowConnection): PultTestApi {
+  return {
+    get environment() {
+      if (connection.environment === null) return null;
+      const { prepared: _credential, ...environment } = connection.environment;
+      return environment;
+    },
+    onDidChange: connection.onDidChange,
+  };
 }

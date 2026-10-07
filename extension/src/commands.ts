@@ -7,10 +7,19 @@ import { parseConnectInput } from "./connection/pairing.ts";
 import { ProbeError } from "./connection/probe.ts";
 import type { WindowConnection } from "./connection/service.ts";
 
-export function registerCommands(catalog: EnvironmentCatalog, connection: WindowConnection) {
+/**
+ * In `development`, `pult.connect` given a pairing link connects without a
+ * prompt, for the headless load. Never in production: any extension, or a
+ * trusted command link, could bind the window to a server of its choosing.
+ */
+export function registerCommands(
+  catalog: EnvironmentCatalog,
+  connection: WindowConnection,
+  development: boolean,
+) {
   return [
     vscode.commands.registerCommand("pult.connect", (pairingLink?: unknown) =>
-      typeof pairingLink === "string"
+      development && typeof pairingLink === "string"
         ? connectLink(connection, pairingLink)
         : connect(catalog, connection),
     ),
@@ -112,10 +121,13 @@ async function add(connection: WindowConnection) {
   }
 }
 
-/** `pult.connect` with a pairing link: no prompts, and a failure throws to the caller. */
+/**
+ * `pult.connect` with a pairing link, in development: no prompts, and a failure
+ * throws to the caller. The link carries a token, so no message repeats it.
+ */
 async function connectLink(connection: WindowConnection, pairingLink: string) {
   const input = parseConnectInput(pairingLink);
-  if (input._tag !== "PairingLink") throw new Error(`Not a pairing link: ${pairingLink}`);
+  if (input._tag !== "PairingLink") throw new Error("pult.connect takes a complete pairing link.");
   if (connection.environment !== null) await connection.disconnect();
   await connection.connect(await connection.probe({ target: input.target }));
 }
