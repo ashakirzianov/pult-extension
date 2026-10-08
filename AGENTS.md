@@ -16,6 +16,7 @@ The extension attaches to a running T3 Code server over its WebSocket and HTTP p
 - `extension/` - the extension: the manifest (`package.json`, whose `contributes` are the commands, the Activity Bar container and its views), `src/extension.ts` as the entry, `src/connection/` the window's connection (the environment catalog and the window binding, the HTTP probe, the vendored runtime's platform layer and the service over it), `media/`, and `test/load.ts`, the headless load. esbuild bundles it into `dist/web/extension.js`.
 - `vendor/t3code/packages` - `contracts`, `client-runtime`, `shared`; `vendor/t3code/patches` - the fork's patches to the packages this repo installs, applied through `pnpm-workspace.yaml`, whose `catalog`, `overrides`, `packageExtensions` and `patchedDependencies` blocks `vendor.ts` writes from the fork's. Read them, never edit them. Import `client-runtime` by subpath; it has no root export.
 - `scripts/` - `vendor.ts` and its test, and `testWeb.ts`, the headless load's runner.
+- `docs/` - standing notes and runbooks: `development.md`, running against a dev server.
 
 ## A web extension
 
@@ -24,7 +25,7 @@ The manifest declares only a `browser` entry, so desktop VS Code runs the extens
 ## The two ways to hurt yourself
 
 1. **Killing by pattern.** Never `pkill -f`, `pgrep | kill`, or `kill` a PID you found by matching a name, path or worktree string; your own agent process has this path in its argv, and this machine runs other VS Code windows and dev servers. Kill only a PID you captured at spawn.
-2. **The live server.** Anton's running T3 Code Extensible, home `~/.t3`, hosts the fleet, you included. Test against a server on an isolated home: `T3CODE_DEV_ALLOWED_ORIGINS=vscode-file://vscode-app vp run dev` in a Pult worktree starts one against that worktree's `.t3`; the main checkout is no worktree and would use `~/.pult`, so add `--home-dir <dir>` there. The variable is there because a dev server accepts cross-origin HTTP only from the origins it names, and desktop VS Code runs the extension from `vscode-file://vscode-app`, which fetches a WebSocket ticket over HTTP before it connects. Desktop VS Code pairs with the server port (the `[dev-runner]` line's `serverPort`) and a token: the pairing link names the web port, whose Vite answers preflights itself and admits only localhost origins. VS Code for the Web's extension host runs at a `v--<hash>.localhost` origin that changes with the browser profile, which the web port admits and no fixed variable could name. Never attach a development build to the live server without asking, and never open `~/.t3/userdata` read-write.
+2. **The live server.** Anton's running T3 Code Extensible, home `~/.t3`, hosts the fleet, you included. Test against a dev server on an isolated home (`docs/development.md`). Never attach a development build to the live server without asking, and never open `~/.t3/userdata` read-write.
 
 ## Hit every surface
 
@@ -41,7 +42,7 @@ The most common defect is a change that works on the path you tested and is miss
 
 - `pnpm i` installs; `pnpm typecheck`, `pnpm lint`, `pnpm fmt:check`, `pnpm test` and `pnpm vendor:check` are the checks; `pnpm package` writes the VSIX to `release/`.
 - Vitest for pure logic, next to the code as `*.test.ts`; no UI tests. Do not add tests that merely mirror the implementation. A test that needs a timeout or a sleep to pass is wrong.
-- `pnpm test:web` is the headless load: `@vscode/test-web` opens VS Code for the Web in Playwright's headless Chromium on port 3917, runs `extension/test/load.ts` in the web worker extension host beside the extension, and fails unless the extension activates and registers its commands. The first run downloads VS Code into `extension/.vscode-test-web/`. With `PULT_TEST_PAIRING_LINK`, a pairing link or `<server>/#token=<token>` (a session token from `t3 auth session issue` survives reruns), it also connects to that server, waits for its projects, and disconnects; `PULT_TEST_RECONNECT=1` then also waits, while you restart the server, for the connection to drop and come back.
+- `pnpm test:web` is the headless load: `@vscode/test-web` opens VS Code for the Web in Playwright's headless Chromium on port 3917, runs `extension/test/load.ts` in the web worker extension host beside the extension, and fails unless the extension activates and registers its commands. The first run downloads VS Code into `extension/.vscode-test-web/`. Given a dev server's pairing link, it also connects (`docs/development.md`).
 - A user-visible change gets one pass in a real VS Code, F5 (`.vscode/launch.json`), by the primary agent after integrating, with Anton's permission before any browser or computer use. Subagents do not launch their own.
 
 ## Documentation
