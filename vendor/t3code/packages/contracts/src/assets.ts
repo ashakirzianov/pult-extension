@@ -23,8 +23,12 @@ export const AssetResource = Schema.Union([
     threadId: ThreadId,
     path: TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
   }),
-  // A workspace file named by a draft that has no thread yet. The draft names
-  // its workspace root explicitly instead of resolving one from a thread.
+  // A workspace file named by its root rather than by a thread, as a draft
+  // with no thread yet names it. Relative paths serve any file under the
+  // root: previewable ones as before, video and audio like a `media-file`,
+  // and anything else as a download, which is how a client reads a file's
+  // bytes (`workspaceFileAssets` in the server config). An absolute path
+  // serves like a `media-file`.
   Schema.TaggedStruct("draft-workspace-file", {
     cwd: TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
     path: TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),

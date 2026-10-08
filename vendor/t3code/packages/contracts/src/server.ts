@@ -656,6 +656,27 @@ export const ServerConfig = Schema.Struct({
   /** Whether thread reads accept the reasoningMessages opt-in. */
   reasoningMessages: Schema.optionalKey(Schema.Boolean),
   /**
+   * Whether projects.statEntry exists and projects.readFile and writeFile
+   * carry file versions, writeFile refusing to overwrite a changed file.
+   * Older servers ignore the expected version and overwrite, so clients must
+   * not send it unless this is set.
+   */
+  projectFileVersions: Schema.optionalKey(Schema.Boolean),
+  /** Whether projects.createDirectory, deleteEntry and renameEntry exist. */
+  projectEntryMutations: Schema.optionalKey(Schema.Boolean),
+  /**
+   * Whether projects.watchEntries exists and stays out of `.git` and
+   * `node_modules`. A Linux server on a Node without `fs.watch`'s `ignore`
+   * leaves it unset, since watching would walk them too.
+   */
+  projectWatchEntries: Schema.optionalKey(Schema.Boolean),
+  /**
+   * Whether assets.createUrl serves any file under the root for a
+   * `draft-workspace-file` with a relative path, not only previewable ones.
+   * Clients read a file's bytes this way.
+   */
+  workspaceFileAssets: Schema.optionalKey(Schema.Boolean),
+  /**
    * Folder behind this environment's Scratch project, for threads that need
    * no repository. Present only on servers that answer projects.ensureScratch
    * and whose data dir is outside a Git checkout.
