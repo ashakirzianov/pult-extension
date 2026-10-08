@@ -29,7 +29,11 @@ const isBearerProfile = Schema.is(BearerConnectionProfile);
 /**
  * The environments this VS Code has paired with, shared by every window: a
  * profile per environment in `globalState` and its bearer in `SecretStorage`,
- * both keyed by environment id, so an environment pairs once.
+ * both keyed by environment id, so an environment pairs once. The extension
+ * pairs itself and never reads the Pult desktop's credential: each client is its
+ * own session. `SecretStorage` is encrypted on desktop and per browser profile
+ * on the web; `workspaceState` would keep the bearer in plain text on disk, and
+ * a setting would sync it across machines.
  */
 export class EnvironmentCatalog {
   private readonly globalState: Memento;
@@ -88,7 +92,10 @@ export class EnvironmentCatalog {
 
 /**
  * The window's one environment, in `workspaceState`: VS Code has no per-window
- * state, and a workspace memento exists even in an empty window.
+ * state, and a workspace memento exists even in an empty window. A binding per
+ * window is "one window per environment" in a form the code can check; a global
+ * binding would give every window the same environment, and the workspace
+ * folders alone cannot name one, since an empty window has none.
  */
 export class WindowBinding {
   private readonly workspaceState: Memento;
