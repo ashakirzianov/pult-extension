@@ -1,6 +1,15 @@
-# Pult extension codebase conventions
+# Pult extension
 
-The extension attaches to a running T3 Code server over its WebSocket and HTTP protocol, typed by the vendored packages, and ships as a VSIX. These conventions are adapted from the Pult repo's `AGENTS.md`, kept where they apply to an extension.
+This repo is **Pult's VS Code extension**, step 1 of RFC 1, and a repo of the **Pult track**: see `TRACK.md`. The extension attaches to a running T3 Code server over its WebSocket and HTTP protocol, typed by the vendored packages, and ships as a VSIX. The server is not here: a server-side need goes to the fork (`../pult/DECISIONS.md`, `server-side-home`). The track's home is the Pult repo (`../pult`): its RFCs, its decisions and the web and desktop clients. Cross-track conventions live in `../axis/AGENTS.md`.
+
+- Read `../pult/docs/pult/rfc-0.md` (human-written, never edited by agents) before anything else, then `../pult/docs/pult/rfc-1.md`, the current direction.
+- `DECISIONS.md` holds this repo's rulings and `../pult/DECISIONS.md` the track's.
+- Commits are small and semantically scoped, one logical unit each, with conventional titles. `origin` is `github.com/ashakirzianov/pult-extension`.
+- Licence: upstream's MIT text stays.
+
+## Review posture
+
+**High-level.** Anton reviews direction, interfaces and module boundaries (the RFCs, `DECISIONS.md`, the seams with the server and the vendored packages), not implementation. Agents commit on their own and surface design deltas introduced during implementation rather than landing them silently. **Never push unless asked.**
 
 ## Glossary
 
@@ -14,13 +23,17 @@ The extension attaches to a running T3 Code server over its WebSocket and HTTP p
 ## Where code lives
 
 - `extension/` - the extension: the manifest (`package.json`, whose `contributes` are the commands, the Activity Bar container and its views), `src/extension.ts` as the entry, `src/connection/` the window's connection (the environment catalog and the window binding, the HTTP probe, the vendored runtime's platform layer and the service over it), `media/`, and `test/load.ts`, the headless load. esbuild bundles it into `dist/web/extension.js`.
-- `vendor/t3code/packages` - `contracts`, `client-runtime`, `shared`; `vendor/t3code/patches` - the fork's patches to the packages this repo installs, applied through `pnpm-workspace.yaml`, whose `catalog`, `overrides`, `packageExtensions` and `patchedDependencies` blocks `vendor.ts` writes from the fork's. Read them, never edit them. Import `client-runtime` by subpath; it has no root export.
-- `scripts/` - `vendor.ts` and its test, and `testWeb.ts`, the headless load's runner.
+- `vendor/t3code/packages` - `contracts`, `client-runtime`, `shared`; `vendor/t3code/patches` - the fork's patches to the packages this repo installs, applied through `pnpm-workspace.yaml`, whose `catalog`, `overrides`, `packageExtensions` and `patchedDependencies` blocks `vendor.ts` writes from the fork's. All of it is copied verbatim from T3 Code Extensible at the commit in `vendor/t3code/PIN`. Import `client-runtime` by subpath; it has no root export.
+- `scripts/` - `vendor.ts` and its test, the vendoring; `checkout.ts`, which finds the fork's checkout; and `testWeb.ts`, the headless load's runner.
 - `docs/` - standing notes and runbooks: `development.md`, running against a dev server.
+
+**Never edit `vendor/`.** A bump is a new PIN, `pnpm vendor:sync`, `pnpm i`, and fixing what the types say; `pnpm vendor:check` fails on drift. The fork's checkout is `PULT_T3CODE_CHECKOUT` (environment or `.env`), by default `~/repos/t3code-extensible`. The PIN is Pult's: bump it here and in Pult together (`DECISIONS.md`, `extension-repo`).
 
 ## A web extension
 
-The manifest declares only a `browser` entry, so desktop VS Code runs the extension in its web worker extension host, and the same bundle runs in VS Code for the Web. There is no Node: no `node:` imports, no `process`, no child processes or raw sockets; the network is `fetch` and `WebSocket`. The bundle targets `--platform=browser` and the tsconfig carries only the `WebWorker` lib, so a Node import fails both. This is why SSH and Tailscale connections, which the Pult desktop has, are not here. The bundle defines `globalThis.location` as `undefined`: Effect's HTTP client resolves every URL against `location`, which in a worker started from a `blob:` URL, as the extension host is, is no base URL, so every request would fail before it is sent. The lasting fix is narrower and belongs in Effect's `Url.baseUrl()`, which should ignore a `location` whose protocol is not http(s); it can go into the fork's Effect patch and be offered upstream, and until then the define stands. A UX that needs Node is Anton's call (RFC 1: "the day a concrete UX needs Node, web goes"), not a workaround.
+The manifest declares only a `browser` entry, so there is no Node: no `node:` imports, no `process`, no child processes or raw sockets; the network is `fetch` and `WebSocket`. The bundle (`--platform=browser`) and the tsconfig (only the `WebWorker` lib) both fail on a Node import (`DECISIONS.md`, `web-extension`).
+
+The bundle defines `globalThis.location` as `undefined`: Effect's HTTP client resolves every URL against `location`, which in a worker started from a `blob:` URL, as the extension host is, is no base URL, so every request would fail before it is sent. The define stands until Effect's `Url.baseUrl()` is fixed (`pult/effect-url-base-location`).
 
 ## The two ways to hurt yourself
 
@@ -47,7 +60,11 @@ The most common defect is a change that works on the path you tested and is miss
 
 ## Documentation
 
-Most code changes do not need a documentation change. `DECISIONS.md` holds the rulings (see `~/.claude/CLAUDE.md` for the entry shape); before adding a paragraph, ask what a maintainer would get wrong without it. Do not commit implementation plans, research notes or agent scratch files.
+Most code changes do not need a documentation change.
+
+- `DECISIONS.md` holds the rulings; an entry takes the shape in `../axis/workflow/global-agents.md`. Before adding a paragraph, ask what a maintainer would get wrong without it.
+- `docs/` holds standing notes and runbooks (`docs/development.md`).
+- An effort's plan may sit beside its design as `docs/<effort>-tasks.md` while the effort runs; when the effort ends, both move to `archive/`. Do not commit research notes or agent scratch files.
 
 ## Taste
 
