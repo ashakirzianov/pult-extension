@@ -9,7 +9,7 @@ This repo is **Pult's VS Code extension**, step 1 of RFC 1, and a repo of the **
 
 ## Review posture
 
-**High-level.** Anton reviews direction, interfaces and module boundaries (the RFCs, `DECISIONS.md`, the seams with the server and the vendored packages), not implementation. Agents commit on their own and surface design deltas introduced during implementation rather than landing them silently. **Never push unless asked.**
+**High-level.** Anton reviews direction, interfaces and module boundaries (the RFCs, `DECISIONS.md`, the seams with the server and the vendored packages), not implementation. Agents commit on their own and surface design deltas introduced during implementation rather than landing them silently. **Never push unless asked:** pushing is Anton's call while the GitHub repo is not created.
 
 ## Glossary
 
@@ -23,7 +23,7 @@ This repo is **Pult's VS Code extension**, step 1 of RFC 1, and a repo of the **
 ## Where code lives
 
 - `extension/` - the extension: the manifest (`package.json`, whose `contributes` are the commands, the Activity Bar container and its views), `src/extension.ts` as the entry, `src/connection/` the window's connection (the environment catalog and the window binding, the HTTP probe, the vendored runtime's platform layer and the service over it), `media/`, and `test/load.ts`, the headless load. esbuild bundles it into `dist/web/extension.js`.
-- `vendor/t3code/packages` - `contracts`, `client-runtime`, `shared`; `vendor/t3code/patches` - the fork's patches to the packages this repo installs, applied through `pnpm-workspace.yaml`, whose `catalog`, `overrides`, `packageExtensions` and `patchedDependencies` blocks `vendor.ts` writes from the fork's. All of it is copied verbatim from T3 Code Extensible at the commit in `vendor/t3code/PIN`. Import `client-runtime` by subpath; it has no root export.
+- `vendor/t3code/packages` - `contracts`, `client-runtime`, `shared`; `vendor/t3code/patches` - the fork's patches to the packages this repo installs, applied through `pnpm-workspace.yaml`, whose `catalog`, `overrides`, `packageExtensions` and `patchedDependencies` blocks `vendor.ts` writes from the fork's (never edit those blocks either). All of it is copied verbatim from T3 Code Extensible at the commit in `vendor/t3code/PIN`. Import `client-runtime` by subpath; it has no root export.
 - `scripts/` - `vendor.ts` and its test, the vendoring; `checkout.ts`, which finds the fork's checkout; and `testWeb.ts`, the headless load's runner.
 - `docs/` - standing notes and runbooks: `development.md`, running against a dev server.
 
@@ -31,7 +31,7 @@ This repo is **Pult's VS Code extension**, step 1 of RFC 1, and a repo of the **
 
 ## A web extension
 
-The manifest declares only a `browser` entry, so there is no Node: no `node:` imports, no `process`, no child processes or raw sockets; the network is `fetch` and `WebSocket`. The bundle (`--platform=browser`) and the tsconfig (only the `WebWorker` lib) both fail on a Node import (`DECISIONS.md`, `web-extension`).
+The manifest declares only a `browser` entry, so there is no Node: no `node:` imports, no `process`, no child processes or raw sockets; the network is `fetch` and `WebSocket`. The bundle (`--platform=browser`) and the tsconfig (the `WebWorker` lib, and `types: ["vscode"]` keeping Node's types out) both fail on a Node import (`DECISIONS.md`, `web-extension`). A UX that needs Node is Anton's call (RFC 1: "the day a concrete UX needs Node, web goes"), not a workaround.
 
 The bundle defines `globalThis.location` as `undefined`: Effect's HTTP client resolves every URL against `location`, which in a worker started from a `blob:` URL, as the extension host is, is no base URL, so every request would fail before it is sent. The define stands until Effect's `Url.baseUrl()` is fixed (`pult/effect-url-base-location`).
 
@@ -62,8 +62,7 @@ The most common defect is a change that works on the path you tested and is miss
 
 Most code changes do not need a documentation change.
 
-- `DECISIONS.md` holds the rulings; an entry takes the shape in `../axis/workflow/global-agents.md`. Before adding a paragraph, ask what a maintainer would get wrong without it.
-- `docs/` holds standing notes and runbooks (`docs/development.md`).
+- A `DECISIONS.md` entry takes the shape in `../axis/workflow/global-agents.md`. Before adding a paragraph, ask what a maintainer would get wrong without it.
 - An effort's plan may sit beside its design as `docs/<effort>-tasks.md` while the effort runs; when the effort ends, both move to `archive/`. Do not commit research notes or agent scratch files.
 
 ## Taste
