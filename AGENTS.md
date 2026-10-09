@@ -1,6 +1,11 @@
+---
+track: pult
+label: repo:pult-extension
+---
+
 # Pult extension
 
-This repo is **Pult's VS Code extension**, step 1 of RFC 1, and a repo of the **Pult track**: see `TRACK.md`. The extension attaches to a running T3 Code server over its WebSocket and HTTP protocol, typed by the vendored packages, and ships as a VSIX. The server is not here: a server-side need goes to the fork (`../pult/DECISIONS.md`, `server-side-home`). The track's home is the Pult repo (`../pult`): its RFCs, its decisions and the web and desktop clients. Cross-track conventions live in `../axis/AGENTS.md`.
+This repo is **Pult's VS Code extension**, step 1 of RFC 1, and a repo of the **Pult track** (xaxis `pult/about`). The extension attaches to a running T3 Code server over its WebSocket and HTTP protocol, typed by the vendored packages, and ships as a VSIX. The server is not here: a server-side need goes to the fork (`../pult/DECISIONS.md`, `server-side-home`). The track's RFCs and decisions live in the Pult repo (`../pult`), beside the web and desktop clients. Cross-track conventions live in `../axis/AGENTS.md`.
 
 - Read `../pult/docs/pult/rfc-0.md` (human-written, never edited by agents) before anything else, then `../pult/docs/pult/rfc-1.md`, the current direction.
 - `DECISIONS.md` holds this repo's rulings and `../pult/DECISIONS.md` the track's.
