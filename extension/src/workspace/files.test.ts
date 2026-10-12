@@ -624,6 +624,53 @@ describe("WorkspaceFiles on a server with the fork's features", () => {
     ]);
   });
 
+  it("keeps a file's protection when the watch sees it deleted and made again", async () => {
+    vi.useFakeTimers();
+    const path = `${ROOT}/src/a.ts`;
+    const big = `${ROOT}/big.txt`;
+    const open: Array<string> = [];
+    const { server, files } = setup(CAPABLE, open);
+    server.put(big, "x".repeat(READ_LIMIT * 2));
+    await files.syncWatches();
+    const watcher = server.watchers.get(ROOT);
+    if (watcher === undefined) throw new Error("The folder is not watched.");
+    const loaded = await files.stat(path);
+    await files.readFile(path);
+    await files.readFile(big);
+    open.push(path, big);
+
+    // `git checkout`, or `rm` and a write: each file goes and comes back, the same size.
+    for (const [changed, contents] of [
+      [path, "export const a = 9;\n"],
+      [big, "y".repeat(READ_LIMIT * 2)],
+    ] as const) {
+      server.files.delete(changed);
+      watcher.listener.changed({
+        changes: [{ path: changed.slice(ROOT.length + 1), kind: "deleted" }],
+        truncated: false,
+      });
+      server.put(changed, contents);
+      watcher.listener.changed({
+        changes: [{ path: changed.slice(ROOT.length + 1), kind: "created" }],
+        truncated: false,
+      });
+    }
+
+    // A write VS Code did not check, as an extension's, still expects the version read.
+    const conflict = await rejection(files.writeFile(path, text("export const a = 2;\n"), SAVE));
+    expect(conflict.message).toMatch(/changed on the host since Pult read it/);
+    expect(vscodeRefusesSave(loaded, await files.stat(path))).toBe(true);
+    expect((await files.stat(big)).readonly).toBe(true);
+    expect((await rejection(files.writeFile(big, text("x"), SAVE))).code).toBe("NoPermissions");
+    expect(server.writes).toEqual([{ path, expectedVersion: "v1" }]);
+
+    // Gone for good: a new file at the path is not the one read.
+    server.files.delete(big);
+    watcher.listener.changed({ changes: [{ path: "big.txt", kind: "deleted" }], truncated: false });
+    await files.writeFile(big, text("new"), { create: true, overwrite: false });
+    expect(server.files.get(big)?.contents).toBe("new");
+  });
+
   it("marks a folder gone from the host and stops watching it", async () => {
     const { server, files, changes, decorated } = setup(CAPABLE);
     await files.syncWatches();

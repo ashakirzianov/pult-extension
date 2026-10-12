@@ -300,8 +300,6 @@ export class WorkspaceFiles implements Disposable {
     options: { readonly create: boolean; readonly overwrite: boolean },
   ): Promise<void> {
     const folder = this.writable(path);
-    const reason = this.readOnly.get(path);
-    if (reason !== undefined) throw new FilesError("NoPermissions", readOnlyMessage(path, reason));
     let contents: string;
     try {
       contents = strictUtf8.decode(content);
@@ -312,14 +310,19 @@ export class WorkspaceFiles implements Disposable {
       );
     }
     const features = await this.server.features();
+    const reason = this.readOnly.get(path);
     // Taken before the existence check, whose stat would replace it.
     const expected = this.overwritable.has(path)
       ? this.overwritable.get(path)
       : this.served.get(path);
     const exists =
-      !features.entryMutations || !options.create || !options.overwrite
+      !features.entryMutations || !options.create || !options.overwrite || reason !== undefined
         ? await this.exists(path)
         : undefined;
+    // The mark outlives a delete on the host; a new file at the path is not the one it marks.
+    if (reason !== undefined && exists === true) {
+      throw new FilesError("NoPermissions", readOnlyMessage(path, reason));
+    }
     if (exists === false && !options.create) throw new FilesError("FileNotFound", path);
     if (exists === true && !options.overwrite) throw new FilesError("FileExists", path);
     if (exists === false && !features.entryMutations) {
@@ -409,7 +412,7 @@ export class WorkspaceFiles implements Disposable {
       (change) => change !== undefined,
     );
     for (const change of changes) {
-      if (change.kind === "deleted") this.forget(change.path);
+      if (change.kind === "deleted") this.forget(change.path, "host");
       else this.bump(change.path);
     }
     if (changes.length > 0) this.host.changed(changes);
@@ -457,7 +460,9 @@ export class WorkspaceFiles implements Disposable {
           path: joinPath(root, change.path),
           kind: change.kind,
         }));
-        for (const change of reported) if (change.kind === "deleted") this.forget(change.path);
+        for (const change of reported) {
+          if (change.kind === "deleted") this.forget(change.path, "host");
+        }
         if (reported.length > 0) this.host.changed(reported);
         // More changed than the batch names.
         if (truncated) void this.refresh(root);
@@ -641,11 +646,18 @@ export class WorkspaceFiles implements Disposable {
   /**
    * Drops what is known of `path` and everything under it. Their synthesized
    * mtimes move on rather than back, so a file deleted and made again never
-   * stats as it did before.
+   * stats as it did before. A delete seen on the `host` keeps the contents
+   * served and the read-only marks until a read replaces them: a file deleted
+   * and made again, as `git checkout` does, is still not what an open editor
+   * holds.
    */
-  private forget(path: string): void {
-    for (const known of [this.served, this.overwritable, this.digests, this.readOnly]) {
-      for (const key of known.keys()) if (relativeTo(path, key) !== undefined) known.delete(key);
+  private forget(path: string, by: "provider" | "host" = "provider"): void {
+    const known =
+      by === "host"
+        ? [this.overwritable]
+        : [this.served, this.overwritable, this.digests, this.readOnly];
+    for (const map of known) {
+      for (const key of map.keys()) if (relativeTo(path, key) !== undefined) map.delete(key);
     }
     for (const key of this.mtimes.keys()) {
       if (key !== path && relativeTo(path, key) !== undefined) this.bump(key);
