@@ -9,9 +9,11 @@ export default defineConfig({
   },
   fmt: {
     ignorePatterns: [
-      // The fork's files, kept byte for byte (scripts/vendor.ts).
+      // The fork's files, kept byte for byte (scripts/vendor.ts), and the copy
+      // that merges upstream's changes (scripts/merge.ts) in upstream's format.
       "vendor/t3code/packages/**",
       "vendor/t3code/patches/**",
+      "extension/webview/t3/**",
       // The decision log has a fixed entry shape, which formatting rewrites.
       "DECISIONS.md",
       "dist",
@@ -22,7 +24,13 @@ export default defineConfig({
     sortPackageJson: {},
   },
   lint: {
-    ignorePatterns: ["vendor/t3code/packages/**", "dist", "release", "node_modules"],
+    ignorePatterns: [
+      "vendor/t3code/packages/**",
+      "extension/webview/t3/**",
+      "dist",
+      "release",
+      "node_modules",
+    ],
     plugins: ["eslint", "oxc", "unicorn", "typescript"],
     categories: {
       correctness: "warn",
