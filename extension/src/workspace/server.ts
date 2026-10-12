@@ -5,11 +5,16 @@ import {
   type EnvironmentUnaryRpcTag,
   getInitialServerConfig,
   request,
-  type RpcSession,
 } from "@t3tools/client-runtime/rpc";
-import { type ProjectWatchEntriesEvent, WS_METHODS } from "@t3tools/contracts";
+import {
+  type EnvironmentAuthorizationError,
+  type ProjectWatchEntriesError,
+  type ProjectWatchEntriesEvent,
+  WS_METHODS,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import type { RpcClientError } from "effect/rpc";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
@@ -146,9 +151,8 @@ const subscribed: WatchItem = { _tag: "subscribed" };
 const gone: WatchItem = { _tag: "gone" };
 
 /**
- * A root's changes: a subscription on each session the supervisor opens, again
- * whenever the server's watcher closes, ending for good once the root is gone.
- * Any other failure waits for the next session.
+ * A root's changes: a subscription on each session the supervisor opens,
+ * ending for good once the root is gone.
  */
 function watchStream(
   cwd: string,
@@ -160,7 +164,8 @@ function watchStream(
         Stream.switchMap(
           Option.match({
             onNone: () => Stream.empty,
-            onSome: (session) => watchSession(session, cwd),
+            onSome: (session) =>
+              watchSession(session.client[WS_METHODS.projectsWatchEntries]({ cwd })),
           }),
         ),
         Stream.takeUntil((item) => item._tag === "gone"),
@@ -169,20 +174,30 @@ function watchStream(
   );
 }
 
-function watchSession(session: RpcSession, cwd: string): Stream.Stream<WatchItem> {
+/**
+ * A root's changes on one session, `subscription` being its `watchEntries`
+ * call: subscribed again whenever the server's watcher closes or the
+ * subscription fails, until the root is found gone.
+ */
+export function watchSession(
+  subscription: Stream.Stream<
+    ProjectWatchEntriesEvent,
+    ProjectWatchEntriesError | EnvironmentAuthorizationError | RpcClientError.RpcClientError
+  >,
+): Stream.Stream<WatchItem> {
   return Stream.succeed(subscribed).pipe(
     Stream.concat(
-      session.client[WS_METHODS.projectsWatchEntries]({ cwd }).pipe(
+      subscription.pipe(
         Stream.map((event): WatchItem => ({ _tag: "changed", event })),
+        Stream.catch((error) =>
+          error._tag === "ProjectWatchEntriesError" && error.failure === "workspace_root_not_found"
+            ? Stream.succeed(gone)
+            : Stream.empty,
+        ),
       ),
     ),
-    // The server's watcher closed: subscribe again, spaced, since a closing
-    // watcher may answer the next subscription by ending it at once.
+    // Spaced, since a closing watcher may answer the next subscription by
+    // ending it at once, and a failing one fail it again.
     Stream.repeat(Schedule.spaced(RESUBSCRIBE_DELAY)),
-    Stream.catch((error) =>
-      error._tag === "ProjectWatchEntriesError" && error.failure === "workspace_root_not_found"
-        ? Stream.succeed(gone)
-        : Stream.empty,
-    ),
   );
 }
