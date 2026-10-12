@@ -4,12 +4,14 @@ import {
   EnvironmentRegistry,
   EnvironmentSupervisor,
 } from "@t3tools/client-runtime/connection";
+import { EnvironmentRpcUnavailableError } from "@t3tools/client-runtime/rpc";
 import {
   makeEnvironmentShellState,
   ShellSnapshotLoader,
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
@@ -101,10 +103,54 @@ export class WindowConnection implements vscode.Disposable {
     );
   }
 
+  /**
+   * Runs an effect on the bound environment's supervisor: RPCs go to its live
+   * session, and fail with `EnvironmentRpcUnavailableError` while there is none
+   * or the window is unbound.
+   */
+  run<A, E>(effect: Effect.Effect<A, E, EnvironmentSupervisor.EnvironmentSupervisor>): Promise<A> {
+    const environmentId = this.binding.environmentId;
+    if (environmentId === undefined) return Promise.reject(unbound());
+    return this.runtime.runPromise(
+      EnvironmentRegistry.EnvironmentRegistry.pipe(
+        Effect.flatMap((registry) => registry.run(environmentId, effect)),
+      ),
+    );
+  }
+
+  /**
+   * Runs a stream on the bound environment's supervisor, handing each item to
+   * `onItem`, until disposed or the window unbinds from that environment.
+   */
+  follow<A>(
+    stream: Stream.Stream<A, never, EnvironmentSupervisor.EnvironmentSupervisor>,
+    onItem: (item: A) => void,
+  ): vscode.Disposable {
+    const environmentId = this.binding.environmentId;
+    if (environmentId === undefined) return new vscode.Disposable(() => {});
+    const fiber = this.runtime.runFork(
+      EnvironmentRegistry.EnvironmentRegistry.pipe(
+        Effect.flatMap((registry) =>
+          registry
+            .followStream(environmentId, stream)
+            .pipe(Stream.runForEach((item) => Effect.sync(() => onItem(item)))),
+        ),
+      ),
+    );
+    return new vscode.Disposable(() => void Effect.runFork(Fiber.interrupt(fiber)));
+  }
+
   dispose(): void {
     this.changes.dispose();
     void this.runtime.dispose();
   }
+}
+
+function unbound() {
+  return new EnvironmentRpcUnavailableError({
+    environmentId: "",
+    message: "This window is not connected to a Pult environment.",
+  });
 }
 
 function followBoundEnvironment(publish: (next: BoundEnvironment | null) => void) {
