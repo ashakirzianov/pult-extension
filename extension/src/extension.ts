@@ -8,7 +8,6 @@ import { connectionStatusBar } from "./statusBar.ts";
 import { registerThreads } from "./threads/index.ts";
 import { threadStatus } from "./threads/presentation.ts";
 import { SocketHub } from "./threads/socketHub.ts";
-import { threadsView } from "./threadsView.ts";
 import { bindToFolders, virtualWorkspace } from "./workspace/index.ts";
 
 /**
@@ -61,7 +60,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
   let stock = false;
   // Before the connection, so the folders' watches stop before it does.
   context.subscriptions.push(...virtualWorkspace(connection, binding, unpaired, () => stock));
-  // The thread tabs; before the connection too, so they let go of the socket before it closes.
+  // The threads: the picker, the tabs, their decorations and commands; before
+  // the connection too, so the tabs let go of the socket before it closes.
   const threads = registerThreads({ context, development, catalog, connection, hub });
   context.subscriptions.push(...threads.disposables);
   const updateContext = () =>
@@ -71,7 +71,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
     connection,
     hub,
     connectionStatusBar(connection),
-    threadsView(connection),
     ...registerCommands(catalog, connection, development),
     connection.onDidChange(updateContext),
     // Another window forgot the bound environment, or paired it again.
