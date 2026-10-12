@@ -96,9 +96,10 @@ export class EnvironmentCatalog {
  * window is "one window per environment" in a form the code can check; a global
  * binding would give every window the same environment, and the workspace
  * folders alone cannot name one, since an empty window has none. The folders
- * of the virtual workspace must match the binding: an unbound window binds to
- * the environment its `pult:` folders name, and a bound one refuses another
- * environment's (`workspace/binding.ts`). Anton's ruling.
+ * of the virtual workspace must match the binding: a window whose `pult:`
+ * folders name an environment binds to it at activation, Connect binds it to
+ * no other (`commands.ts`), and a bound window refuses another environment's
+ * folders (`workspace/binding.ts`). Anton's ruling.
  */
 export class WindowBinding {
   private readonly workspaceState: Memento;

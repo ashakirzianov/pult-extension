@@ -7,22 +7,25 @@ import type { EnvironmentCatalog } from "./connection/catalog.ts";
 import { parseConnectInput } from "./connection/pairing.ts";
 import { ProbeError } from "./connection/probe.ts";
 import type { WindowConnection } from "./connection/service.ts";
+import { namesEnvironment } from "./workspace/paths.ts";
 
 /**
  * In `development`, `pult.connect` given a pairing link connects without a
  * prompt, for the headless load. Never in production: any extension, or a
  * trusted command link, could bind the window to a server of its choosing.
+ * `folders` is the environment the window's `pult:` folders name.
  */
 export function registerCommands(
   catalog: EnvironmentCatalog,
   connection: WindowConnection,
   development: boolean,
+  folders: () => EnvironmentId | undefined,
 ) {
   return [
     vscode.commands.registerCommand("pult.connect", (pairingLink?: unknown) =>
       development && typeof pairingLink === "string"
-        ? connectLink(connection, pairingLink)
-        : connect(catalog, connection),
+        ? connectLink(connection, pairingLink, folders())
+        : connect(catalog, connection, folders),
     ),
     vscode.commands.registerCommand("pult.disconnect", () => connection.disconnect()),
     vscode.commands.registerCommand("pult.forget", () => forget(catalog, connection)),
@@ -32,9 +35,14 @@ export function registerCommands(
 /**
  * Connects the window to an environment: one from the catalog, or one added by
  * pairing. A bound window offers to disconnect first, since a window holds one
- * environment and another environment belongs in a new window.
+ * environment and another environment belongs in a new window; a window whose
+ * folders name an environment connects to that one only (`WindowBinding`).
  */
-async function connect(catalog: EnvironmentCatalog, connection: WindowConnection) {
+async function connect(
+  catalog: EnvironmentCatalog,
+  connection: WindowConnection,
+  folders: () => EnvironmentId | undefined,
+) {
   const bound = connection.environment;
   if (bound !== null) {
     const retry = "Retry Now";
@@ -74,7 +82,17 @@ async function connect(catalog: EnvironmentCatalog, connection: WindowConnection
           "Connect this window to an environment",
         );
   if (picked === undefined) return;
-  if (picked === "add") return add(connection);
+  const named = folders();
+  if (picked === "add") return add(connection, named);
+  if (named !== undefined && !namesEnvironment(named, picked.environmentId)) {
+    const label = environments.find((profile) =>
+      namesEnvironment(named, profile.environmentId),
+    )?.label;
+    void vscode.window.showErrorMessage(
+      `This window's folders are on ${label ?? "an environment this VS Code has not paired with"}, not ${picked.label}. A window holds one environment: open ${picked.label} in a new window.`,
+    );
+    return;
+  }
   return reconnect(catalog, connection, picked);
 }
 
@@ -129,11 +147,19 @@ export async function add(connection: WindowConnection, expected?: EnvironmentId
  * `pult.connect` with a pairing link, in development: no prompts, and a failure
  * throws to the caller. The link carries a token, so no message repeats it.
  */
-async function connectLink(connection: WindowConnection, pairingLink: string) {
+async function connectLink(
+  connection: WindowConnection,
+  pairingLink: string,
+  expected: EnvironmentId | undefined,
+) {
   const input = parseConnectInput(pairingLink);
   if (input._tag !== "PairingLink") throw new Error("pult.connect takes a complete pairing link.");
   if (connection.environment !== null) await connection.disconnect();
-  await connection.connect(await connection.probe({ target: input.target }));
+  const probed = await connection.probe({
+    target: input.target,
+    ...(expected === undefined ? {} : { expectedEnvironmentId: expected }),
+  });
+  await connection.connect(probed);
 }
 
 /**

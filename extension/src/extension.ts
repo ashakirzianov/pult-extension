@@ -8,7 +8,7 @@ import { connectionStatusBar } from "./statusBar.ts";
 import { registerThreads } from "./threads/index.ts";
 import { threadStatus } from "./threads/presentation.ts";
 import { SocketHub } from "./threads/socketHub.ts";
-import { bindToFolders, virtualWorkspace } from "./workspace/index.ts";
+import { bindToFolders, foldersEnvironment, virtualWorkspace } from "./workspace/index.ts";
 
 /**
  * What `activate` returns outside production, for the headless load to watch
@@ -71,7 +71,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
     connection,
     hub,
     connectionStatusBar(connection),
-    ...registerCommands(catalog, connection, development),
+    ...registerCommands(catalog, connection, development, foldersEnvironment),
     connection.onDidChange(updateContext),
     // Another window forgot the bound environment, or paired it again.
     context.secrets.onDidChange(async ({ key }) => {

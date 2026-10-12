@@ -12,7 +12,7 @@ import { endedTurns, projectRoots } from "./projects.ts";
 import { PultFileSystemProvider, workspaceDecorations } from "./provider.ts";
 import { connectionServer } from "./server.ts";
 
-export { bindToFolders } from "./binding.ts";
+export { bindToFolders, foldersEnvironment } from "./binding.ts";
 
 const CHANGE_TYPES: Record<Change["kind"], vscode.FileChangeType> = {
   created: vscode.FileChangeType.Created,

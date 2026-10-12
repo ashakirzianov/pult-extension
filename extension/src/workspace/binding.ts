@@ -13,6 +13,15 @@ export function pultFolders(): ReadonlyArray<vscode.WorkspaceFolder> {
   );
 }
 
+/**
+ * The environment the window's `pult:` folders name: the first folder's, as a
+ * window binds to (`bindToFolders`) and Connect requires (`registerCommands`).
+ */
+export function foldersEnvironment(): EnvironmentId | undefined {
+  const named = pultFolders()[0]?.uri.authority;
+  return named === undefined || named === "" ? undefined : EnvironmentId.make(named);
+}
+
 /** The window's workspace folders on the environment it is bound to. */
 export function boundFolders(binding: WindowBinding): ReadonlyArray<vscode.WorkspaceFolder> {
   const bound = binding.environmentId;
@@ -33,12 +42,12 @@ export async function bindToFolders(
   binding: WindowBinding,
 ): Promise<EnvironmentId | undefined> {
   if (binding.environmentId !== undefined) return undefined;
-  const named = pultFolders()[0]?.uri.authority;
-  if (named === undefined || named === "") return undefined;
+  const named = foldersEnvironment();
+  if (named === undefined) return undefined;
   const profile = catalog
     .list()
     .find((candidate) => namesEnvironment(named, candidate.environmentId));
-  if (profile === undefined) return EnvironmentId.make(named);
+  if (profile === undefined) return named;
   await binding.bind(profile.environmentId);
   return undefined;
 }
