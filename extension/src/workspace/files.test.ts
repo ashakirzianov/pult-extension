@@ -666,6 +666,25 @@ describe("WorkspaceFiles on a server with the fork's features", () => {
     ]);
   });
 
+  it("refuses a name the server would trim to another", async () => {
+    const { server, files } = setup(CAPABLE);
+    server.put(`${ROOT}/foo`, "kept");
+    const refusals = await Promise.all([
+      rejection(files.writeFile(`${ROOT}/foo `, text("new"), SAVE)),
+      rejection(files.createDirectory(`${ROOT}/ lib`)),
+      rejection(files.rename(`${ROOT}/src/a.ts`, `${ROOT}/src/b.ts\t`)),
+      rejection(files.delete(`${ROOT}/foo `, { recursive: false })),
+    ]);
+    expect(refusals.map((error) => [error.code, error.message.includes("trims")])).toEqual([
+      ["NoPermissions", true],
+      ["NoPermissions", true],
+      ["NoPermissions", true],
+      ["NoPermissions", true],
+    ]);
+    expect(server.files.get(`${ROOT}/foo`)?.contents).toBe("kept");
+    expect(server.writes).toEqual([]);
+  });
+
   it("never deletes, moves or writes a workspace folder itself", async () => {
     const { files } = setup(CAPABLE);
     expect((await rejection(files.delete(ROOT, { recursive: true }))).code).toBe("NoPermissions");

@@ -534,6 +534,14 @@ export class WorkspaceFiles implements Disposable {
         `Pult writes only under the workspace folders: ${path}.`,
       );
     }
+    // The server trims a path's ends: "foo " would be written as "foo".
+    const untrimmed = folder.relativePath.split("/").find((name) => name !== name.trim());
+    if (untrimmed !== undefined) {
+      throw new FilesError(
+        "NoPermissions",
+        `Pult cannot write "${untrimmed}": the server trims whitespace from the ends of a path, so the write would land on another entry.`,
+      );
+    }
     return folder;
   }
 
