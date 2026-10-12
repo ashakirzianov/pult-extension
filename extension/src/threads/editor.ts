@@ -210,9 +210,15 @@ export class ThreadEditorProvider
     this.follow(panel, false);
   }
 
-  /** Reopens a visible tab whose URI no longer names what it shows; `shown` if it just came into view. */
-  private follow(panel: ThreadPanel, shown: boolean) {
-    if (panel.visible && this.destination(panel, shown) !== null) void this.reopen(panel, shown);
+  /**
+   * @internal Reopens a visible tab whose URI no longer names what it shows;
+   * `shown` if it just came into view. A tab whose page has not yet said what
+   * storage it saved, as one restored after a window reload, waits for it.
+   */
+  follow(panel: ThreadPanel, shown: boolean) {
+    if (panel.visible && panel.storage !== null && this.destination(panel, shown) !== null) {
+      void this.reopen(panel, shown);
+    }
   }
 
   private destination(panel: ThreadPanel, shown: boolean): vscode.Uri | null {
@@ -413,6 +419,7 @@ class ThreadPanel {
         // share of the window's.
         if (message.storage !== null) this.provider.shareSaved(message.storage);
         this.storage = message.storage ?? this.storage ?? this.provider.sharedStorage;
+        this.provider.follow(this, false);
         this.post({
           type: "init",
           target: this.resource.target,
