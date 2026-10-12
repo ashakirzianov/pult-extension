@@ -4,7 +4,7 @@ The extension runs no server, so testing it needs one, and never Anton's live se
 
 ## Starting one
 
-In a Pult worktree, `T3CODE_DEV_ALLOWED_ORIGINS=vscode-file://vscode-app vp run dev` starts a server against that worktree's `.t3`. The main checkout is no worktree and would use `~/.pult`, so add `--home-dir <dir>` there.
+In a Pult checkout, the main one or a worktree, `T3CODE_DEV_ALLOWED_ORIGINS=vscode-file://vscode-app vp run dev` starts a server against that checkout's own `.t3`.
 
 The variable is there because a dev server accepts cross-origin HTTP only from the origins it names, and desktop VS Code runs the extension from `vscode-file://vscode-app`, which fetches a WebSocket ticket over HTTP before it connects.
 
