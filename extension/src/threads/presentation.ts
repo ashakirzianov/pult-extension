@@ -1,17 +1,19 @@
-// How the picker and tabs present threads, after upstream's sidebar
+// How the picker and tabs present threads, after upstream's shelved sidebar
 // (`webview/t3/src/components/Sidebar.tsx` and `Sidebar.logic.ts`, which the
-// host bundle cannot import): its shelves and their order, its status set as a
-// letter badge, its status label text, and the times its shelves show.
+// host bundle cannot import): its shelves and their order, its row status as a
+// letter badge and its label, and the times its shelves show.
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/models";
-import { effectiveSnoozed, snoozeWakeLabel } from "@t3tools/client-runtime/state/thread-settled";
+import {
+  effectiveSnoozed,
+  snoozeWakeLabel,
+  threadWokeAt,
+} from "@t3tools/client-runtime/state/thread-settled";
 import {
   resolveSettledThreadTimestamp,
   sortActiveThreadsByOrderKey,
   sortPinnedThreadsByOrderKey,
   sortSettledThreads,
 } from "@t3tools/client-runtime/state/thread-sort";
-import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 
 /**
  * The thread features a server advertises (`DECISIONS.md`, `capability-gated-rpcs`).
@@ -30,6 +32,8 @@ export const NO_THREAD_FEATURES: ThreadFeatures = {
   pinning: false,
 };
 
+export type ShelfName = "pinned" | "active" | "snoozed" | "settled";
+
 export interface Shelves {
   readonly pinned: ReadonlyArray<EnvironmentThreadShell>;
   readonly active: ReadonlyArray<EnvironmentThreadShell>;
@@ -47,26 +51,40 @@ export function isListed(thread: EnvironmentThreadShell): boolean {
 }
 
 /**
- * Upstream's shelves: snooze wins until its wake time, then settlement wins
- * over a stale pin. Pinned and active follow their arranged order, snoozed the
- * soonest wake, settled the newest settlement.
+ * Upstream's shelf for a thread: snooze wins until its wake time, then
+ * settlement wins over a stale pin. Null for a thread the sidebar does not list.
+ */
+export function shelfOf(
+  thread: EnvironmentThreadShell,
+  now: string,
+  features: ThreadFeatures,
+): ShelfName | null {
+  if (!isListed(thread)) return null;
+  if (features.snooze && effectiveSnoozed(thread, { now })) return "snoozed";
+  if (features.settlement && thread.settledOverride === "settled") return "settled";
+  return thread.pinnedAt === null ? "active" : "pinned";
+}
+
+/**
+ * The threads on upstream's shelves (`shelfOf`). Pinned and active follow their
+ * arranged order, snoozed the soonest wake, settled the newest settlement.
  */
 export function shelve(
   threads: ReadonlyArray<EnvironmentThreadShell>,
   now: string,
   features: ThreadFeatures,
 ): Shelves {
-  const pinned: Array<EnvironmentThreadShell> = [];
-  const active: Array<EnvironmentThreadShell> = [];
-  const snoozed: Array<EnvironmentThreadShell> = [];
-  const settled: Array<EnvironmentThreadShell> = [];
+  const shelves: Record<ShelfName, Array<EnvironmentThreadShell>> = {
+    pinned: [],
+    active: [],
+    snoozed: [],
+    settled: [],
+  };
   for (const thread of threads) {
-    if (!isListed(thread)) continue;
-    if (features.snooze && effectiveSnoozed(thread, { now })) snoozed.push(thread);
-    else if (features.settlement && thread.settledOverride === "settled") settled.push(thread);
-    else if (thread.pinnedAt !== null) pinned.push(thread);
-    else active.push(thread);
+    const shelf = shelfOf(thread, now, features);
+    if (shelf !== null) shelves[shelf].push(thread);
   }
+  const { pinned, active, snoozed, settled } = shelves;
   const wakeMs = (thread: EnvironmentThreadShell) => Date.parse(thread.snoozedUntil ?? "") || 0;
   return {
     pinned: sortPinnedThreadsByOrderKey(pinned),
@@ -76,16 +94,23 @@ export function shelve(
   };
 }
 
-/** The next time a snoozed thread wakes, when the shelves change by themselves. */
-export function nextWake(shelves: Shelves): number | null {
-  const wakes = shelves.snoozed
+/** The next time one of `threads` wakes from its snooze, after `now`. */
+export function nextWake(
+  threads: ReadonlyArray<EnvironmentThreadShell>,
+  now: number,
+): number | null {
+  const wakes = threads
     .map((thread) => Date.parse(thread.snoozedUntil ?? ""))
-    .filter((ms) => !Number.isNaN(ms));
+    .filter((ms) => ms > now);
   return wakes.length === 0 ? null : Math.min(...wakes);
 }
 
-/** R running, W waiting on you, Q queued, F failed; the colours are `package.json`'s. */
-export type StatusBadge = "R" | "W" | "Q" | "F";
+/**
+ * R in motion, W waiting on you, F failed; the colours are `package.json`'s.
+ * The sidebar's grey Waiting, an agent stopped with background work that will
+ * wake it, is not the user's turn, and recedes as Working does: R.
+ */
+export type StatusBadge = "R" | "W" | "F";
 
 export interface ThreadStatus {
   /** Upstream's label for the status, as its sidebar shows it. */
@@ -93,34 +118,67 @@ export interface ThreadStatus {
   readonly badge: StatusBadge | null;
 }
 
-/** Upstream's status pill, with its failure states, mapped onto a badge. */
-export function threadStatus(thread: EnvironmentThreadShell): ThreadStatus | null {
-  if (thread.hasPendingApprovals) return { label: "Pending Approval", badge: "W" };
-  if (thread.hasPendingUserInput) return { label: "Awaiting Input", badge: "W" };
-  const runtime = thread.runtime?.status;
-  if (runtime === "running" || runtime === "waiting") return { label: "Working", badge: "R" };
-  if (runtime === "preparing" || runtime === "starting" || runtime === "queued") {
-    return { label: "Connecting", badge: "Q" };
-  }
-  if (runtime === "failed") {
-    return thread.runtime?.lastErrorClass === "usage_limit"
-      ? { label: "Usage Limit", badge: "F" }
-      : { label: "Failed", badge: "F" };
-  }
-  if (backgroundWorkHoldsCompletion(thread.pendingBackgroundTasks)) {
-    return { label: "Waiting", badge: "R" };
+/**
+ * The shelved sidebar's row status (the fork's `resolveSidebarThreadStatus`,
+ * then the row's Woke and Done), with the older pill's Plan Ready between the
+ * failures and Woke.
+ */
+export function threadStatus(thread: EnvironmentThreadShell, now: string): ThreadStatus | null {
+  if (thread.hasPendingApprovals) return { label: "Approval", badge: "W" };
+  if (thread.hasPendingUserInput) return { label: "Input", badge: "W" };
+  switch (thread.runtime?.status) {
+    case "preparing":
+    case "queued":
+    case "starting":
+    case "running":
+    case "waiting":
+      // A native /goal keeps the agent going across turns until it is met.
+      return { label: thread.goal?.status === "active" ? "Goal" : "Working", badge: "R" };
+    case "idle":
+      return { label: "Waiting", badge: "R" };
+    case "failed":
+      return thread.runtime.lastErrorClass === "usage_limit"
+        ? { label: "Limited", badge: "F" }
+        : { label: "Failed", badge: "F" };
   }
   if (
     thread.interactionMode === "plan" &&
     thread.hasActionableProposedPlan &&
-    !threadRuntimeIsActive(thread.runtime)
+    isLatestRunSettled(thread)
   ) {
     return { label: "Plan Ready", badge: "W" };
   }
-  if (hasUnseenCompletion(thread)) return { label: "Completed", badge: null };
+  if (isWoke(thread, now)) return { label: "Woke", badge: "W" };
+  if (hasUnseenCompletion(thread)) return { label: "Done", badge: null };
   return null;
 }
 
+/** Upstream's `isLatestRunSettled` (`webview/t3/src/session-logic.ts`). */
+function isLatestRunSettled({ latestRun, runtime }: EnvironmentThreadShell): boolean {
+  if (latestRun === null) return false;
+  switch (latestRun.status) {
+    case "preparing":
+    case "queued":
+    case "starting":
+    case "running":
+    case "waiting":
+      return false;
+  }
+  return runtime?.activeRunId !== latestRun.runId;
+}
+
+/**
+ * A snoozed thread that woke and has not been visited since; settling it
+ * clears it. An unparseable visit counts as none, so it cannot eat the wake.
+ */
+function isWoke(thread: EnvironmentThreadShell, now: string): boolean {
+  const wokeAt = Date.parse(threadWokeAt(thread, { now }) ?? "");
+  if (Number.isNaN(wokeAt) || thread.settledOverride === "settled") return false;
+  const visitedAt = Date.parse(thread.lastVisitedAt ?? "");
+  return Number.isNaN(visitedAt) || visitedAt < wokeAt;
+}
+
+/** A run that completed since the last visit; a thread never visited counts as read. */
 function hasUnseenCompletion(thread: EnvironmentThreadShell): boolean {
   const completedAt = Date.parse(thread.latestRun?.completedAt ?? "");
   if (Number.isNaN(completedAt) || !thread.lastVisitedAt) return false;
@@ -145,7 +203,7 @@ export function ago(timestamp: string, now: string): string {
 /** A row's description: its status label, or in the shelves, when it wakes or when it settled. */
 export function threadDescription(
   thread: EnvironmentThreadShell,
-  shelf: keyof Shelves,
+  shelf: ShelfName,
   now: string,
 ): string {
   if (shelf === "snoozed" && thread.snoozedUntil !== null) {
@@ -155,5 +213,5 @@ export function threadDescription(
     const settledAt = resolveSettledThreadTimestamp(thread);
     return settledAt === null ? "" : ago(settledAt, now);
   }
-  return threadStatus(thread)?.label ?? "";
+  return threadStatus(thread, now)?.label ?? "";
 }

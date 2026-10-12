@@ -425,7 +425,7 @@
       },
       {
         "id": "pult.threadRunning",
-        "description": "A thread whose agent is running: its badge in the Pult picker and on its tab.",
+        "description": "A thread whose agent is at work, or waiting on its background work: its badge in the Pult picker and on its tab.",
         "defaults": {
           "dark": "charts.blue",
           "light": "charts.blue",
@@ -435,22 +435,12 @@
       },
       {
         "id": "pult.threadWaiting",
-        "description": "A thread waiting on you: an approval, a question, or a plan.",
+        "description": "A thread waiting on you: an approval, a question, a plan, or a snooze that ended.",
         "defaults": {
           "dark": "charts.yellow",
           "light": "charts.yellow",
           "highContrast": "charts.yellow",
           "highContrastLight": "charts.yellow"
-        }
-      },
-      {
-        "id": "pult.threadQueued",
-        "description": "A thread whose run is queued or starting.",
-        "defaults": {
-          "dark": "charts.purple",
-          "light": "charts.purple",
-          "highContrast": "charts.purple",
-          "highContrastLight": "charts.purple"
         }
       },
       {

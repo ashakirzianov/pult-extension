@@ -115,7 +115,7 @@ function testApi(
           pinned: thread.pinnedAt !== null,
           settled: thread.settledOverride === "settled",
           snoozed: thread.snoozedUntil !== null,
-          working: ["R", "Q"].includes(threadStatus(thread)?.badge ?? ""),
+          working: threadStatus(thread, new Date().toISOString())?.badge === "R",
         })),
       onDidChange: threads.model.onDidChange,
       probe: (uri) => threads.editor.probe(uri),

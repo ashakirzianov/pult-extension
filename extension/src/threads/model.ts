@@ -12,7 +12,10 @@ import * as Option from "effect/Option";
 import * as vscode from "vscode";
 
 import type { WindowConnection } from "../connection/service.ts";
-import { NO_THREAD_FEATURES, type ThreadFeatures } from "./presentation.ts";
+import { nextWake, NO_THREAD_FEATURES, type ThreadFeatures } from "./presentation.ts";
+
+// The longest delay `setTimeout` keeps; a later wake is waited for in steps.
+const MAX_TIMER_MS = 2 ** 31 - 1;
 
 interface Held {
   readonly environmentId: EnvironmentId;
@@ -27,7 +30,8 @@ interface Held {
  * that, and dropped only when the window's environment changes. The thread
  * features its server advertises are read on each connect, and set as the
  * `pult.threadSettlement`, `pult.threadSnooze` and `pult.threadPinning`
- * context keys for the menus.
+ * context keys for the menus. A snooze ending is a change too, since it moves
+ * a thread off its shelf and may show it Woke.
  */
 export class ThreadsModel implements vscode.Disposable {
   private held: Held | null = null;
@@ -36,6 +40,7 @@ export class ThreadsModel implements vscode.Disposable {
     readonly features: ThreadFeatures;
   } | null = null;
   private wasReady = false;
+  private wakeTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly changes = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changes.event;
   private readonly subscription: vscode.Disposable;
@@ -71,10 +76,24 @@ export class ThreadsModel implements vscode.Disposable {
       } else if (this.held !== null && this.held.environmentId !== environment.environmentId) {
         this.held = null;
       } else return;
+      this.scheduleWake();
       this.changes.fire();
     };
     update();
     this.subscription = connection.onDidChange(update);
+  }
+
+  private scheduleWake() {
+    clearTimeout(this.wakeTimer);
+    const wake = nextWake(this.threads(), Date.now());
+    if (wake === null) return;
+    this.wakeTimer = setTimeout(
+      () => {
+        this.scheduleWake();
+        this.changes.fire();
+      },
+      Math.min(wake - Date.now() + 1, MAX_TIMER_MS),
+    );
   }
 
   private async loadFeatures(connection: WindowConnection, environmentId: EnvironmentId) {
@@ -139,6 +158,7 @@ export class ThreadsModel implements vscode.Disposable {
   }
 
   dispose(): void {
+    clearTimeout(this.wakeTimer);
     this.subscription.dispose();
     this.changes.dispose();
   }

@@ -104,7 +104,7 @@ describe("shelve", () => {
     );
     expect(ids(shelves.pinned)).toEqual(["pin-a", "pin-b"]);
     expect(ids(shelves.snoozed)).toEqual(["wakes-sooner", "wakes-later"]);
-    expect(nextWake(shelves)).toBe(Date.parse("2026-06-20T13:00:00.000Z"));
+    expect(nextWake(shelves.snoozed, Date.parse(NOW))).toBe(Date.parse("2026-06-20T13:00:00.000Z"));
   });
 });
 
@@ -119,43 +119,68 @@ describe("threadStatus", () => {
     activeRunId: RunId.make("run"),
     status,
   });
+  const completed = {
+    latestRunId: RunId.make("run"),
+    status: "completed" as const,
+    latestRunCompletedAt: at("2026-06-20T11:00:00.000Z"),
+  };
+  const status = (overrides: Partial<OrchestrationV2ThreadShell>) =>
+    threadStatus(thread("t", overrides), NOW);
 
   it("badges what waits on the user W, ahead of a running agent", () => {
-    expect(
-      threadStatus(
-        thread("t", { ...running("running"), pendingRuntimeRequest: request("command") }),
-      ),
-    ).toEqual({ label: "Pending Approval", badge: "W" });
-    expect(threadStatus(thread("t", { pendingRuntimeRequest: request("user_input") }))).toEqual({
-      label: "Awaiting Input",
+    expect(status({ ...running("running"), pendingRuntimeRequest: request("command") })).toEqual({
+      label: "Approval",
+      badge: "W",
+    });
+    expect(status({ pendingRuntimeRequest: request("user_input") })).toEqual({
+      label: "Input",
       badge: "W",
     });
   });
 
-  it("badges a running agent R, a queued one Q and a failed one F", () => {
-    expect(threadStatus(thread("t", running("running")))).toEqual({ label: "Working", badge: "R" });
-    expect(threadStatus(thread("t", running("queued")))).toEqual({
-      label: "Connecting",
-      badge: "Q",
+  it("badges an agent at work R, queued or running, and a failed one F", () => {
+    expect(status(running("running"))).toEqual({ label: "Working", badge: "R" });
+    expect(status(running("queued"))).toEqual({ label: "Working", badge: "R" });
+    expect(status(running("failed"))).toEqual({ label: "Failed", badge: "F" });
+    expect(status({ ...running("failed"), lastErrorClass: "usage_limit" })).toEqual({
+      label: "Limited",
+      badge: "F",
     });
-    expect(threadStatus(thread("t", running("failed")))).toEqual({ label: "Failed", badge: "F" });
-    expect(
-      threadStatus(thread("t", { ...running("failed"), lastErrorClass: "usage_limit" })),
-    ).toEqual({ label: "Usage Limit", badge: "F" });
   });
 
-  it("labels an unseen completion without a badge, and a seen one not at all", () => {
-    const completed = {
-      latestRunId: RunId.make("run"),
-      status: "completed" as const,
-      latestRunCompletedAt: at("2026-06-20T11:00:00.000Z"),
-    };
+  it("shows Plan Ready only once the plan's run has settled", () => {
+    const plan = { interactionMode: "plan" as const, hasActionableProposedPlan: true };
+    expect(status({ ...plan, ...completed, lastVisitedAt: at(NOW) })).toEqual({
+      label: "Plan Ready",
+      badge: "W",
+    });
+    expect(status({ ...plan, ...running("running") })?.label).toBe("Working");
+    // Completed, but still the runtime's active run: not settled yet.
     expect(
-      threadStatus(thread("t", { ...completed, lastVisitedAt: at("2026-06-20T10:00:00.000Z") })),
-    ).toEqual({ label: "Completed", badge: null });
-    expect(
-      threadStatus(thread("t", { ...completed, lastVisitedAt: at("2026-06-20T11:30:00.000Z") })),
+      status({ ...plan, ...completed, activeRunId: RunId.make("run"), lastVisitedAt: at(NOW) }),
     ).toBeNull();
+  });
+
+  it("shows a snooze that ended Woke until the thread is visited or settled", () => {
+    const woken = {
+      snoozedAt: at("2026-06-20T09:00:00.000Z"),
+      snoozedUntil: at("2026-06-20T11:30:00.000Z"),
+    };
+    expect(status({ ...woken, lastVisitedAt: at("2026-06-20T10:00:00.000Z") })).toEqual({
+      label: "Woke",
+      badge: "W",
+    });
+    expect(status({ ...woken, lastVisitedAt: at("2026-06-20T11:45:00.000Z") })).toBeNull();
+    expect(status({ ...woken, settledOverride: "settled" })).toBeNull();
+    expect(status({ ...woken, snoozedUntil: at("2026-06-20T13:00:00.000Z") })).toBeNull();
+  });
+
+  it("labels an unseen completion Done without a badge, and a seen one not at all", () => {
+    expect(status({ ...completed, lastVisitedAt: at("2026-06-20T10:00:00.000Z") })).toEqual({
+      label: "Done",
+      badge: null,
+    });
+    expect(status({ ...completed, lastVisitedAt: at("2026-06-20T11:30:00.000Z") })).toBeNull();
   });
 });
 

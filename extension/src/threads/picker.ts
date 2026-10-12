@@ -5,18 +5,40 @@ import type { BoundEnvironment } from "../connection/presentation.ts";
 import type { WindowConnection } from "../connection/service.ts";
 import type { ProjectFavicons } from "./favicons.ts";
 import type { ThreadsModel } from "./model.ts";
-import { nextWake, type Shelves, shelve, threadDescription, threadStatus } from "./presentation.ts";
+import {
+  type ShelfName,
+  type Shelves,
+  shelve,
+  threadDescription,
+  threadStatus,
+} from "./presentation.ts";
 import { parseThreadUri, threadUri } from "./uri.ts";
 
-type ShelfName = keyof Shelves;
-type FoldedShelf = "snoozed" | "settled";
+/** The shelves under a heading of their own; active threads sit at the top level. */
+type HeadedShelf = Exclude<ShelfName, "active">;
 
 export type PickerNode =
   | { readonly kind: "thread"; readonly thread: EnvironmentThreadShell; readonly shelf: ShelfName }
-  | { readonly kind: "shelf"; readonly shelf: FoldedShelf; readonly count: number };
+  | { readonly kind: "shelf"; readonly shelf: HeadedShelf; readonly count: number };
 
-const SHELF_LABELS: Record<FoldedShelf, string> = { snoozed: "Snoozed", settled: "Settled" };
-const EXPANDED_KEY = "pult.picker.expanded";
+const HEADED_SHELVES = ["pinned", "snoozed", "settled"] as const;
+const SHELF_LABELS: Record<HeadedShelf, string> = {
+  pinned: "Pinned",
+  snoozed: "Snoozed",
+  settled: "Settled",
+};
+const SHELF_ICONS: Record<HeadedShelf, string> = {
+  pinned: "pinned",
+  snoozed: "clock",
+  settled: "pass",
+};
+// Pinned threads show until folded, the other shelves until opened.
+const OPEN_BY_DEFAULT: Record<HeadedShelf, boolean> = {
+  pinned: true,
+  snoozed: false,
+  settled: false,
+};
+const OPEN_SHELVES_KEY = "pult.picker.openShelves";
 const MINUTE_MS = 60_000;
 
 /** The `vscode.Uri` of a thread's tab, whose decorations the picker's row shares. */
@@ -26,10 +48,11 @@ export function threadTabUri(environmentId: string, thread: EnvironmentThreadShe
 
 /**
  * `pult.threads`, modelled on upstream's sidebar (`DECISIONS.md`,
- * `thread-picker`): pinned threads, then active ones, then the Snoozed and
- * Settled shelves, collapsed until opened and remembered per window. A row's
- * icon is its project's, its badge its status, its description the status
- * label or the shelf's time; it follows the active thread tab.
+ * `thread-picker`): the Pinned shelf, open until folded, then active threads,
+ * then the Snoozed and Settled shelves, folded until opened, each remembered
+ * per window. A row's icon is its project's, its badge its status, its
+ * description the status label or the shelf's time; it follows the active
+ * thread tab.
  */
 export function threadPicker(input: {
   readonly connection: WindowConnection;
@@ -45,12 +68,11 @@ export function threadPicker(input: {
   let now = new Date().toISOString();
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  const expanded = () => workspaceState.get<ReadonlyArray<FoldedShelf>>(EXPANDED_KEY, []);
-  const setExpanded = (shelf: FoldedShelf, open: boolean) =>
-    workspaceState.update(EXPANDED_KEY, [
-      ...expanded().filter((each) => each !== shelf),
-      ...(open ? [shelf] : []),
-    ]);
+  const openShelves = () =>
+    workspaceState.get<Partial<Record<HeadedShelf, boolean>>>(OPEN_SHELVES_KEY, {});
+  const isOpen = (shelf: HeadedShelf) => openShelves()[shelf] ?? OPEN_BY_DEFAULT[shelf];
+  const setOpen = (shelf: HeadedShelf, open: boolean) =>
+    workspaceState.update(OPEN_SHELVES_KEY, { ...openShelves(), [shelf]: open });
 
   const rebuild = () => {
     now = new Date().toISOString();
@@ -59,17 +81,17 @@ export function threadPicker(input: {
     for (const shelf of ["pinned", "active", "snoozed", "settled"] as const) {
       for (const thread of shelves[shelf]) nodes.set(thread.id, { kind: "thread", thread, shelf });
     }
-    shelfNodes = (["snoozed", "settled"] as const)
-      .filter((shelf) => shelves[shelf].length > 0)
-      .map((shelf) => ({ kind: "shelf", shelf, count: shelves[shelf].length }));
-    // Wake countdowns and settled times read in minutes; a snooze ends on its own.
+    shelfNodes = HEADED_SHELVES.filter((shelf) => shelves[shelf].length > 0).map((shelf) => ({
+      kind: "shelf",
+      shelf,
+      count: shelves[shelf].length,
+    }));
+    // Wake countdowns and settled times read in minutes; the model announces a snooze's end.
     clearTimeout(timer);
-    timer = undefined;
-    if (shelfNodes.length > 0) {
-      const wake = nextWake(shelves);
-      const delay = Math.min(MINUTE_MS, wake === null ? MINUTE_MS : wake - Date.now() + 1);
-      timer = setTimeout(update, Math.max(1_000, delay));
-    }
+    timer =
+      shelves.snoozed.length + shelves.settled.length > 0
+        ? setTimeout(update, MINUTE_MS)
+        : undefined;
   };
 
   const environmentId = () => model.environmentId ?? "";
@@ -80,8 +102,9 @@ export function threadPicker(input: {
       getChildren: (node) => {
         if (node === undefined) {
           return [
-            ...[...shelves.pinned, ...shelves.active].map((thread) => nodes.get(thread.id)!),
-            ...shelfNodes,
+            ...shelfNodes.filter((each) => each.kind === "shelf" && each.shelf === "pinned"),
+            ...shelves.active.map((thread) => nodes.get(thread.id)!),
+            ...shelfNodes.filter((each) => each.kind === "shelf" && each.shelf !== "pinned"),
           ];
         }
         return node.kind === "shelf"
@@ -89,12 +112,12 @@ export function threadPicker(input: {
           : [];
       },
       getParent: (node) =>
-        node.kind === "thread" && (node.shelf === "snoozed" || node.shelf === "settled")
+        node.kind === "thread" && node.shelf !== "active"
           ? shelfNodes.find((each) => each.kind === "shelf" && each.shelf === node.shelf)
           : undefined,
       getTreeItem: (node) =>
         node.kind === "shelf"
-          ? shelfItem(node.shelf, node.count, expanded().includes(node.shelf))
+          ? shelfItem(node.shelf, node.count, isOpen(node.shelf))
           : threadItem(node.thread, node.shelf),
     },
   });
@@ -106,7 +129,7 @@ export function threadPicker(input: {
     const project = model.project(thread.projectId);
     if (project !== undefined) item.iconPath = favicons.icon(project);
     item.description = threadDescription(thread, shelf, now);
-    item.tooltip = threadTooltip(thread, project?.title);
+    item.tooltip = threadTooltip(thread, project?.title, now);
     item.contextValue = `thread-${shelf}`;
     item.command = { title: "Open", command: "pult.openThread", arguments: [item.resourceUri] };
     return item;
@@ -152,10 +175,10 @@ export function threadPicker(input: {
       view.message = message(connection.environment);
     }),
     view.onDidExpandElement(({ element }) => {
-      if (element.kind === "shelf") void setExpanded(element.shelf, true);
+      if (element.kind === "shelf") void setOpen(element.shelf, true);
     }),
     view.onDidCollapseElement(({ element }) => {
-      if (element.kind === "shelf") void setExpanded(element.shelf, false);
+      if (element.kind === "shelf") void setOpen(element.shelf, false);
     }),
     vscode.window.tabGroups.onDidChangeTabs(revealActive),
     vscode.window.tabGroups.onDidChangeTabGroups(revealActive),
@@ -164,14 +187,14 @@ export function threadPicker(input: {
   );
 }
 
-function shelfItem(shelf: FoldedShelf, count: number, open: boolean): vscode.TreeItem {
+function shelfItem(shelf: HeadedShelf, count: number, open: boolean): vscode.TreeItem {
   const item = new vscode.TreeItem(
     SHELF_LABELS[shelf],
     open ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
   );
   item.id = `shelf/${shelf}`;
   item.description = String(count);
-  item.iconPath = new vscode.ThemeIcon(shelf === "snoozed" ? "clock" : "pass");
+  item.iconPath = new vscode.ThemeIcon(SHELF_ICONS[shelf]);
   item.contextValue = `shelf-${shelf}`;
   return item;
 }
@@ -180,12 +203,13 @@ function shelfItem(shelf: FoldedShelf, count: number, open: boolean): vscode.Tre
 function threadTooltip(
   thread: EnvironmentThreadShell,
   projectTitle: string | undefined,
+  now: string,
 ): vscode.MarkdownString {
   const tooltip = new vscode.MarkdownString();
   tooltip.appendMarkdown(`**${escapeMarkdown(thread.title)}**\n\n`);
   const lines = [
     projectTitle === undefined ? null : `Project: ${projectTitle}`,
-    threadStatus(thread)?.label ?? null,
+    threadStatus(thread, now)?.label ?? null,
     thread.worktreePath === null ? null : `Worktree: \`${thread.worktreePath}\``,
     thread.branch === null ? null : `Branch: \`${thread.branch}\``,
     pullRequestLine(thread),

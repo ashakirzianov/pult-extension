@@ -7,7 +7,6 @@ import { parseThreadUri } from "./uri.ts";
 const COLORS: Record<StatusBadge, string> = {
   R: "pult.threadRunning",
   W: "pult.threadWaiting",
-  Q: "pult.threadQueued",
   F: "pult.threadFailed",
 };
 
@@ -24,7 +23,7 @@ export function threadDecorations(model: ThreadsModel): vscode.Disposable {
       if (resource === null || resource.target.kind !== "thread") return undefined;
       if (resource.environmentId !== model.environmentId) return undefined;
       const thread = model.thread(resource.target.threadId);
-      const status = thread === undefined ? null : threadStatus(thread);
+      const status = thread === undefined ? null : threadStatus(thread, new Date().toISOString());
       if (status?.badge == null) return undefined;
       return new vscode.FileDecoration(
         status.badge,
