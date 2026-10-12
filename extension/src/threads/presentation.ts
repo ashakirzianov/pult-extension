@@ -15,6 +15,8 @@ import {
   sortSettledThreads,
 } from "@t3tools/client-runtime/state/thread-sort";
 
+import { parseThreadUri, type UriComponents } from "./uri.ts";
+
 /**
  * The thread features a server advertises (`DECISIONS.md`, `capability-gated-rpcs`).
  * Without settlement or snooze, as on a stock server, no thread sits on those
@@ -214,4 +216,44 @@ export function threadDescription(
     return settledAt === null ? "" : ago(settledAt, now);
   }
   return threadStatus(thread, now)?.label ?? "";
+}
+
+export interface TabMenuContext {
+  /** Every open tab of a thread the model has, then those on each shelf, as URI strings. */
+  readonly tabs: Readonly<Record<"all" | ShelfName, ReadonlyArray<string>>>;
+  /** The shelf of the active tab's thread; null for a draft or any other tab. */
+  readonly activeShelf: ShelfName | null;
+}
+
+/** What the menus' when clauses read of the open tabs (`TabMenuContext`). */
+export function tabMenuContext(input: {
+  readonly tabs: ReadonlyArray<UriComponents & { toString(): string }>;
+  readonly active: UriComponents | undefined;
+  readonly environmentId: string | null;
+  readonly thread: (threadId: string) => EnvironmentThreadShell | undefined;
+  readonly now: string;
+  readonly features: ThreadFeatures;
+}): TabMenuContext {
+  const shelf = (uri: UriComponents) => {
+    const resource = parseThreadUri(uri);
+    if (resource?.target.kind !== "thread" || resource.environmentId !== input.environmentId) {
+      return null;
+    }
+    const thread = input.thread(resource.target.threadId);
+    return thread === undefined ? null : shelfOf(thread, input.now, input.features);
+  };
+  const tabs: Record<"all" | ShelfName, Array<string>> = {
+    all: [],
+    pinned: [],
+    active: [],
+    snoozed: [],
+    settled: [],
+  };
+  for (const uri of input.tabs) {
+    const tabShelf = shelf(uri);
+    if (tabShelf === null) continue;
+    tabs.all.push(uri.toString());
+    tabs[tabShelf].push(uri.toString());
+  }
+  return { tabs, activeShelf: input.active === undefined ? null : shelf(input.active) };
 }

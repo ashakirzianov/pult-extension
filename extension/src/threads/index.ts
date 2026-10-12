@@ -9,6 +9,7 @@ import { ProjectFavicons } from "./favicons.ts";
 import { ThreadsModel } from "./model.ts";
 import { threadPicker } from "./picker.ts";
 import type { SocketHub } from "./socketHub.ts";
+import { threadTabMenus } from "./tabMenus.ts";
 import { THREAD_VIEW_TYPE } from "./uri.ts";
 
 /** The threads of the window's environment: the picker, a tab per thread, their status, their commands. */
@@ -43,6 +44,7 @@ export function registerThreads(input: {
       }),
       threadPicker({ connection, model, favicons, workspaceState: context.workspaceState }),
       threadDecorations(model),
+      threadTabMenus(model),
       ...registerThreadCommands(connection, model),
     ],
   };

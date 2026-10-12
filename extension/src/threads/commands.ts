@@ -50,8 +50,10 @@ export function registerThreadCommands(connection: WindowConnection, model: Thre
   const run = <A, E>(
     effect: Effect.Effect<A, E, EnvironmentSupervisor.EnvironmentSupervisor | Crypto.Crypto>,
   ) => connection.run(effect.pipe(Effect.provideService(Crypto.Crypto, webCrypto)));
-  const thread = (argument: unknown) => threadFromArgument(model, argument) ?? activeThread(model);
-  // A picker row passes the row and the selection; a tab menu, the tab's URI.
+  // A picker row passes the row and the selection; a tab menu, the tab's URI;
+  // the palette, nothing, for the active tab.
+  const thread = (argument: unknown) =>
+    argument === undefined ? activeThread(model) : threadFromArgument(model, argument);
   const withThread =
     (
       action: (

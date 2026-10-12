@@ -15,6 +15,7 @@ import {
   nextWake,
   NO_THREAD_FEATURES,
   shelve,
+  tabMenuContext,
   threadDescription,
   threadStatus,
 } from "./presentation.ts";
@@ -207,5 +208,64 @@ describe("threadDescription", () => {
     expect(ago("2026-06-20T11:55:00.000Z", NOW)).toBe("5m");
     expect(ago("2026-06-18T12:00:00.000Z", NOW)).toBe("2d");
     expect(ago("2026-05-30T12:00:00.000Z", NOW)).toBe("3w");
+  });
+});
+
+describe("tabMenuContext", () => {
+  const uri = (path: string, query = "") => ({
+    scheme: "pult-thread",
+    authority: "env",
+    path,
+    query,
+    toString: () => `pult-thread://env${path}`,
+  });
+  const threads = new Map(
+    [
+      thread("pinned", { pinnedAt: at("2026-06-19T00:00:00.000Z") }),
+      thread("snoozed", { snoozedUntil: at("2026-06-20T15:00:00.000Z") }),
+      thread("settled", { settledOverride: "settled" }),
+      thread("active"),
+    ].map((each) => [each.id as string, each]),
+  );
+  const context = (active: ReturnType<typeof uri> | undefined) =>
+    tabMenuContext({
+      tabs: [
+        uri("/pinned/A title"),
+        uri("/snoozed/A title"),
+        uri("/settled/A title"),
+        uri("/active/A title"),
+        uri("/active/A title in another group"),
+        uri("/draft/d/New Thread", "project=p"),
+        uri("/gone/A title"),
+      ],
+      active,
+      environmentId: "env",
+      thread: (threadId) => threads.get(threadId),
+      now: NOW,
+      features: ALL,
+    });
+
+  it("files each open tab of a known thread under its thread's shelf", () => {
+    expect(context(undefined).tabs).toEqual({
+      all: [
+        "pult-thread://env/pinned/A title",
+        "pult-thread://env/snoozed/A title",
+        "pult-thread://env/settled/A title",
+        "pult-thread://env/active/A title",
+        "pult-thread://env/active/A title in another group",
+      ],
+      pinned: ["pult-thread://env/pinned/A title"],
+      active: [
+        "pult-thread://env/active/A title",
+        "pult-thread://env/active/A title in another group",
+      ],
+      snoozed: ["pult-thread://env/snoozed/A title"],
+      settled: ["pult-thread://env/settled/A title"],
+    });
+  });
+
+  it("names the active tab's shelf for the palette, and none for a draft", () => {
+    expect(context(uri("/settled/A title")).activeShelf).toBe("settled");
+    expect(context(uri("/draft/d/New Thread", "project=p")).activeShelf).toBeNull();
   });
 });

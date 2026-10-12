@@ -262,35 +262,119 @@
         },
         {
           "command": "pult.newThreadInProject",
-          "when": "activeCustomEditorId == pult.thread"
+          "when": "activeCustomEditorId == pult.thread && pult.activeTabShelf"
         },
         {
           "command": "pult.pinThread",
-          "when": "activeCustomEditorId == pult.thread && pult.threadPinning"
+          "when": "activeCustomEditorId == pult.thread && pult.threadPinning && pult.activeTabShelf == active"
         },
         {
           "command": "pult.unpinThread",
-          "when": "activeCustomEditorId == pult.thread && pult.threadPinning"
+          "when": "activeCustomEditorId == pult.thread && pult.threadPinning && pult.activeTabShelf == pinned"
         },
         {
           "command": "pult.settleThread",
-          "when": "activeCustomEditorId == pult.thread && pult.threadSettlement"
+          "when": "activeCustomEditorId == pult.thread && pult.threadSettlement && pult.activeTabShelf =~ /^(active|pinned)$/"
         },
         {
           "command": "pult.unsettleThread",
-          "when": "activeCustomEditorId == pult.thread && pult.threadSettlement"
+          "when": "activeCustomEditorId == pult.thread && pult.threadSettlement && pult.activeTabShelf == settled"
         },
         {
           "command": "pult.snoozeThread",
-          "when": "activeCustomEditorId == pult.thread && pult.threadSnooze"
+          "when": "activeCustomEditorId == pult.thread && pult.threadSnooze && pult.activeTabShelf =~ /^(active|pinned)$/"
         },
         {
           "command": "pult.unsnoozeThread",
-          "when": "activeCustomEditorId == pult.thread && pult.threadSnooze"
+          "when": "activeCustomEditorId == pult.thread && pult.threadSnooze && pult.activeTabShelf == snoozed"
         },
         {
           "command": "pult.copyThreadLink",
-          "when": "activeCustomEditorId == pult.thread"
+          "when": "activeCustomEditorId == pult.thread && pult.activeTabShelf"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "pult.pinThread",
+          "when": "resource in pult.threadTabs.active && pult.threadPinning",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pult.unpinThread",
+          "when": "resource in pult.threadTabs.pinned && pult.threadPinning",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pult.snoozeThread",
+          "when": "pult.threadSnooze && resource in pult.threadTabs.active || pult.threadSnooze && resource in pult.threadTabs.pinned",
+          "group": "navigation@2"
+        },
+        {
+          "command": "pult.unsnoozeThread",
+          "when": "resource in pult.threadTabs.snoozed && pult.threadSnooze",
+          "group": "navigation@2"
+        },
+        {
+          "command": "pult.settleThread",
+          "when": "pult.threadSettlement && resource in pult.threadTabs.active || pult.threadSettlement && resource in pult.threadTabs.pinned",
+          "group": "navigation@3"
+        },
+        {
+          "command": "pult.unsettleThread",
+          "when": "resource in pult.threadTabs.settled && pult.threadSettlement",
+          "group": "navigation@3"
+        },
+        {
+          "command": "pult.copyThreadLink",
+          "when": "resource in pult.threadTabs.all",
+          "group": "pult_thread@1"
+        },
+        {
+          "command": "pult.newThreadInProject",
+          "when": "resource in pult.threadTabs.all",
+          "group": "pult_thread@2"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "pult.pinThread",
+          "when": "resource in pult.threadTabs.active && pult.threadPinning",
+          "group": "pult_1_shelve@1"
+        },
+        {
+          "command": "pult.unpinThread",
+          "when": "resource in pult.threadTabs.pinned && pult.threadPinning",
+          "group": "pult_1_shelve@1"
+        },
+        {
+          "command": "pult.snoozeThread",
+          "when": "pult.threadSnooze && resource in pult.threadTabs.active || pult.threadSnooze && resource in pult.threadTabs.pinned",
+          "group": "pult_1_shelve@2"
+        },
+        {
+          "command": "pult.unsnoozeThread",
+          "when": "resource in pult.threadTabs.snoozed && pult.threadSnooze",
+          "group": "pult_1_shelve@2"
+        },
+        {
+          "command": "pult.settleThread",
+          "when": "pult.threadSettlement && resource in pult.threadTabs.active || pult.threadSettlement && resource in pult.threadTabs.pinned",
+          "group": "pult_1_shelve@3"
+        },
+        {
+          "command": "pult.unsettleThread",
+          "when": "resource in pult.threadTabs.settled && pult.threadSettlement",
+          "group": "pult_1_shelve@3"
+        },
+        {
+          "command": "pult.copyThreadLink",
+          "when": "resource in pult.threadTabs.all",
+          "group": "pult_2_thread@1"
+        },
+        {
+          "command": "pult.newThreadInProject",
+          "when": "resource in pult.threadTabs.all",
+          "group": "pult_2_thread@2"
         }
       ],
       "view/title": [
