@@ -295,8 +295,10 @@ describe("WorkspaceFiles on a stock server", () => {
       rejection(files.createDirectory(`${ROOT}/lib`)),
       rejection(files.delete(`${ROOT}/src/a.ts`, { recursive: false })),
       rejection(files.rename(`${ROOT}/src/a.ts`, `${ROOT}/src/b.ts`)),
+      rejection(files.copy(`${ROOT}/src/a.ts`, `${ROOT}/src/b.ts`, { overwrite: false })),
     ]);
     expect(refusals.map((error) => error.code)).toEqual([
+      "NoPermissions",
       "NoPermissions",
       "NoPermissions",
       "NoPermissions",
@@ -427,6 +429,68 @@ describe("WorkspaceFiles on either server, a file the server cannot read back ex
       expect(server.writes).toEqual([]);
     });
   }
+});
+
+describe("WorkspaceFiles copying on a server with the fork's features", () => {
+  const BOM = new Uint8Array([0xef, 0xbb, 0xbf, 0x61]);
+  const LATIN1 = new Uint8Array([0x63, 0x61, 0x66, 0xe9]);
+
+  it("copies a file it cannot read back exactly from its bytes, or refuses it", async () => {
+    const { server, files, changes } = setup(CAPABLE);
+    server.putBytes(`${ROOT}/bom.txt`, BOM);
+    server.put(`${ROOT}/big.txt`, "é".repeat(READ_LIMIT));
+    server.putBytes(`${ROOT}/latin1.txt`, LATIN1);
+    server.put(`${ROOT}/logo.png`, "\0PNG");
+
+    await files.copy(`${ROOT}/bom.txt`, `${ROOT}/bom 2.txt`, { overwrite: false });
+    await files.copy(`${ROOT}/big.txt`, `${ROOT}/big 2.txt`, { overwrite: false });
+    await files.copy(`${ROOT}/logo.png`, `${ROOT}/logo 2.png`, { overwrite: false });
+    const refused = await rejection(
+      files.copy(`${ROOT}/latin1.txt`, `${ROOT}/latin1 2.txt`, { overwrite: false }),
+    );
+
+    expect(server.files.get(`${ROOT}/bom 2.txt`)?.bytes).toEqual(BOM);
+    expect(server.files.get(`${ROOT}/big 2.txt`)?.contents).toBe("é".repeat(READ_LIMIT));
+    expect(server.files.get(`${ROOT}/logo 2.png`)?.contents).toBe("\0PNG");
+    expect(refused.message).toMatch(/not UTF-8 text/);
+    expect(server.files.has(`${ROOT}/latin1 2.txt`)).toBe(false);
+    expect(changes.map((change) => change.path)).toEqual([
+      `${ROOT}/bom 2.txt`,
+      `${ROOT}/big 2.txt`,
+      `${ROOT}/logo 2.png`,
+    ]);
+  });
+
+  it("refuses to copy a truncated or non-UTF-8 file where the server cannot send its bytes", async () => {
+    const { server, files } = setup({ ...CAPABLE, fileAssets: false });
+    server.putBytes(`${ROOT}/bom.txt`, BOM);
+    server.put(`${ROOT}/big.txt`, "x".repeat(READ_LIMIT * 2));
+
+    for (const name of ["bom.txt", "big.txt"]) {
+      const error = await rejection(
+        files.copy(`${ROOT}/${name}`, `${ROOT}/copy-${name}`, { overwrite: false }),
+      );
+      expect(error.message).toMatch(/cannot send Pult its bytes/);
+    }
+    expect(server.writes).toEqual([]);
+  });
+
+  it("copies a folder with everything in it, but never into itself", async () => {
+    const { server, files } = setup(CAPABLE);
+    server.put(`${ROOT}/src/lib/b.ts`, "b");
+
+    await files.copy(`${ROOT}/src`, `${ROOT}/copy`, { overwrite: false });
+
+    expect(server.files.get(`${ROOT}/copy/a.ts`)?.contents).toBe("export const a = 1;\n");
+    expect(server.files.get(`${ROOT}/copy/lib/b.ts`)?.contents).toBe("b");
+    expect(
+      (await rejection(files.copy(`${ROOT}/src`, `${ROOT}/src/inner`, { overwrite: false }))).code,
+    ).toBe("NoPermissions");
+    expect(
+      (await rejection(files.copy(`${ROOT}/src/a.ts`, `${ROOT}/copy/a.ts`, { overwrite: false })))
+        .code,
+    ).toBe("FileExists");
+  });
 });
 
 describe("WorkspaceFiles on a server with the fork's features", () => {

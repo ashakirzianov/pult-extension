@@ -73,6 +73,13 @@ export class PultFileSystemProvider implements vscode.FileSystemProvider {
     return this.call(newUri, (to) => this.call(oldUri, (from) => this.files.rename(from, to)));
   }
 
+  /** VS Code copies through this rather than a read and a write; see `WorkspaceFiles.copy`. */
+  copy(source: vscode.Uri, destination: vscode.Uri, options: { readonly overwrite: boolean }) {
+    return this.call(destination, (to) =>
+      this.call(source, (from) => this.files.copy(from, to, options)),
+    );
+  }
+
   private async call<A>(uri: vscode.Uri, operation: (path: string) => Promise<A>): Promise<A> {
     const bound = this.bound();
     if (bound === undefined) {

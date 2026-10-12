@@ -271,12 +271,7 @@ export class WorkspaceFiles implements Disposable {
       return this.readBinary(path, target);
     }
     const bytes = utf8.encode(result.contents);
-    // The server decodes leniently: an invalid byte reads as U+FFFD and a BOM is dropped.
-    const reason: ReadOnlyReason | undefined = result.truncated
-      ? "truncated"
-      : bytes.length !== result.byteLength || result.contents.includes("\uFFFD")
-        ? "lossy"
-        : undefined;
+    const reason = readOnlyReason(result, bytes.length);
     if (reason !== this.readOnly.get(path)) {
       if (reason === undefined) this.readOnly.delete(path);
       else {
@@ -393,6 +388,36 @@ export class WorkspaceFiles implements Disposable {
   }
 
   /**
+   * Copies a file, or a folder of the workspace folders with everything it
+   * lists. VS Code would copy a file by reading it as text and writing that
+   * back, corrupting one the server cannot read back exactly: such a file is
+   * copied from its bytes over the asset route, if they are UTF-8 text, the
+   * only contents the server writes, and refused otherwise.
+   */
+  async copy(from: string, to: string, options: { readonly overwrite: boolean }): Promise<void> {
+    this.writable(to);
+    if (relativeTo(from, to) !== undefined) {
+      throw new FilesError("NoPermissions", `Pult cannot copy ${baseName(from)} into itself.`);
+    }
+    const features = await this.server.features();
+    if (!features.entryMutations) throw new FilesError("NoPermissions", MUTATIONS_UNSUPPORTED);
+    if (!options.overwrite && (await this.exists(to))) throw new FilesError("FileExists", to);
+    const source = this.target(from);
+    const kind = features.fileVersions
+      ? (
+          await this.server
+            .statEntry({ cwd: source.cwd, relativePath: source.relativePath })
+            .catch(failed(from))
+        ).kind
+      : await this.listedKind(from, source.folder);
+    if (kind === "other") {
+      throw new FilesError("NoPermissions", `Pult copies only files and folders: ${from}.`);
+    }
+    await this.copyEntry(from, to, kind);
+    this.host.changed([{ path: to, kind: "created" }]);
+  }
+
+  /**
    * The open files under `under` may have changed on the host: a turn ended
    * there, the connection came back, or a watch (re)started. On a server with
    * versions each is re-stat'd by VS Code; on a stock server each is re-read
@@ -483,11 +508,7 @@ export class WorkspaceFiles implements Disposable {
    * workspace folder holding it, else to a project or worktree root, else
    * absolute against any root, as a thread's citation may be.
    */
-  private target(path: string): {
-    readonly cwd: string;
-    readonly relativePath: string;
-    readonly folder: Located | undefined;
-  } {
+  private target(path: string): Target {
     const folder = locate(this.host.roots(), path);
     if (folder !== undefined) {
       return { cwd: toHostPath(folder.root), relativePath: folder.relativePath, folder };
@@ -597,19 +618,83 @@ export class WorkspaceFiles implements Disposable {
     if (decorated.length > 0) this.host.decorated(decorated);
   }
 
-  private async readBinary(
-    path: string,
-    target: { readonly cwd: string; readonly relativePath: string },
-  ): Promise<Uint8Array> {
+  private readBinary(path: string, target: Target): Promise<Uint8Array> {
+    return this.readAsset(
+      path,
+      target,
+      `${baseName(path)} is a binary file, which this server cannot send to Pult. A server that advertises workspaceFileAssets can.`,
+    );
+  }
+
+  /** A file's bytes over the asset route, which serves any file by a path relative to its root. */
+  private async readAsset(path: string, target: Target, unavailable: string): Promise<Uint8Array> {
     const features = await this.server.features();
-    // The asset route serves any file by a path relative to its root.
     if (!features.fileAssets || toHostPath(path) === target.relativePath) {
-      throw new FilesError(
-        "Unavailable",
-        `${baseName(path)} is a binary file, which this server cannot send to Pult. A server that advertises workspaceFileAssets can.`,
-      );
+      throw new FilesError("Unavailable", unavailable);
     }
     return this.server.readAsset(target.cwd, target.relativePath).catch(failed(path));
+  }
+
+  private async copyEntry(from: string, to: string, kind: ProjectEntry["kind"]): Promise<void> {
+    const target = this.writable(to);
+    const source = this.target(from);
+    if (kind === "file") {
+      const contents = await this.exactText(from, source);
+      await this.server
+        .writeFile({ cwd: toHostPath(target.root), relativePath: target.relativePath, contents })
+        .catch(failed(to));
+      this.bump(to);
+      return;
+    }
+    if (source.folder === undefined) {
+      throw new FilesError("NoPermissions", `Pult browses only the workspace folders: ${from}.`);
+    }
+    const listing = await this.server
+      .listEntries({ cwd: source.cwd, directoryPath: source.relativePath })
+      .catch(failed(from));
+    if (listing.truncated) {
+      throw new FilesError(
+        "NoPermissions",
+        `${baseName(from)} holds more entries than the server lists at once, so Pult cannot copy all of it.`,
+      );
+    }
+    await this.server
+      .createDirectory({ cwd: toHostPath(target.root), relativePath: target.relativePath })
+      .catch(failed(to));
+    for (const entry of listing.entries) {
+      const name = baseName(entry.path);
+      await this.copyEntry(joinPath(from, name), joinPath(to, name), entry.kind);
+    }
+  }
+
+  /** A file's whole contents as text the server writes back byte for byte. */
+  private async exactText(path: string, source: Target): Promise<string> {
+    const name = baseName(path);
+    let unreadable = `${name} is a binary file`;
+    try {
+      const result = await this.server.readFile({
+        cwd: source.cwd,
+        relativePath: source.relativePath,
+      });
+      const reason = readOnlyReason(result, utf8.encode(result.contents).length);
+      if (reason === undefined) return result.contents;
+      unreadable =
+        reason === "truncated"
+          ? `${name} is larger than the server reads`
+          : `${name} is not plain UTF-8`;
+    } catch (error) {
+      if (field(error, "failure") !== "binary_file") throw toFilesError(error, path);
+    }
+    const unavailable = `${unreadable}, and this server cannot send Pult its bytes, so Pult will not copy it. A server that advertises workspaceFileAssets can.`;
+    const bytes = await this.readAsset(path, source, unavailable);
+    try {
+      return strictUtf8.decode(bytes);
+    } catch {
+      throw new FilesError(
+        "NoPermissions",
+        `${name} is not UTF-8 text, and the server writes only text, so Pult will not copy it rather than corrupt it.`,
+      );
+    }
   }
 
   private async exists(path: string): Promise<boolean> {
@@ -664,6 +749,24 @@ export class WorkspaceFiles implements Disposable {
     }
     this.bump(path);
   }
+}
+
+/** Where an RPC finds a path; `folder` is the workspace folder holding it, if one does. */
+interface Target {
+  readonly cwd: string;
+  readonly relativePath: string;
+  readonly folder: Located | undefined;
+}
+
+/** Why a read cannot be written back. The server decodes leniently: an invalid byte reads as U+FFFD and a BOM is dropped. */
+function readOnlyReason(
+  result: ProjectReadFileResult,
+  encodedLength: number,
+): ReadOnlyReason | undefined {
+  if (result.truncated) return "truncated";
+  return encodedLength !== result.byteLength || result.contents.includes("\uFFFD")
+    ? "lossy"
+    : undefined;
 }
 
 function readOnlyMessage(path: string, reason: ReadOnlyReason): string {
