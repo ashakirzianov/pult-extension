@@ -5,6 +5,8 @@ import { EnvironmentCatalog, WindowBinding } from "./connection/catalog.ts";
 import type { BoundEnvironment } from "./connection/presentation.ts";
 import { WindowConnection } from "./connection/service.ts";
 import { connectionStatusBar } from "./statusBar.ts";
+import { registerThreads } from "./threads/index.ts";
+import { threadStatus } from "./threads/presentation.ts";
 import { SocketHub } from "./threads/socketHub.ts";
 import { threadsView } from "./threadsView.ts";
 import { bindToFolders, virtualWorkspace } from "./workspace/index.ts";
@@ -19,6 +21,25 @@ export interface PultTestApi {
   readonly onDidChange: vscode.Event<void>;
   /** From now on the workspace treats the server as stock, using none of the fork's features. */
   readonly simulateStockServer: () => void;
+  readonly threads: {
+    readonly list: () => ReadonlyArray<TestThread>;
+    readonly onDidChange: vscode.Event<void>;
+    /** A thread tab's page text. */
+    readonly probe: (uri: string) => Promise<string>;
+    /** Sends a message through a thread tab's composer. */
+    readonly send: (uri: string, text: string) => Promise<void>;
+  };
+}
+
+export interface TestThread {
+  readonly id: string;
+  readonly projectId: string;
+  readonly title: string;
+  readonly pinned: boolean;
+  readonly settled: boolean;
+  readonly snoozed: boolean;
+  /** Its agent is running, queued, or held by background work. */
+  readonly working: boolean;
 }
 
 /**
@@ -40,6 +61,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
   let stock = false;
   // Before the connection, so the folders' watches stop before it does.
   context.subscriptions.push(...virtualWorkspace(connection, binding, unpaired, () => stock));
+  // The thread tabs; before the connection too, so they let go of the socket before it closes.
+  const threads = registerThreads({ context, development, catalog, connection, hub });
+  context.subscriptions.push(...threads.disposables);
   const updateContext = () =>
     vscode.commands.executeCommand("setContext", "pult.bound", connection.environment !== null);
   void updateContext();
@@ -64,13 +88,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
     }),
   );
   return development
-    ? testApi(connection, () => {
+    ? testApi(connection, threads, () => {
         stock = true;
       })
     : undefined;
 }
 
-function testApi(connection: WindowConnection, simulateStockServer: () => void): PultTestApi {
+function testApi(
+  connection: WindowConnection,
+  threads: ReturnType<typeof registerThreads>,
+  simulateStockServer: () => void,
+): PultTestApi {
   return {
     simulateStockServer,
     get environment() {
@@ -79,5 +107,20 @@ function testApi(connection: WindowConnection, simulateStockServer: () => void):
       return environment;
     },
     onDidChange: connection.onDidChange,
+    threads: {
+      list: () =>
+        threads.model.threads().map((thread) => ({
+          id: thread.id,
+          projectId: thread.projectId,
+          title: thread.title,
+          pinned: thread.pinnedAt !== null,
+          settled: thread.settledOverride === "settled",
+          snoozed: thread.snoozedUntil !== null,
+          working: ["R", "Q"].includes(threadStatus(thread)?.badge ?? ""),
+        })),
+      onDidChange: threads.model.onDidChange,
+      probe: (uri) => threads.editor.probe(uri),
+      send: (uri, text) => threads.editor.send(uri, text),
+    },
   };
 }

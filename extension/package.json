@@ -154,6 +154,18 @@
         "when": "pult.bound && workspaceFolderCount == 0"
       }
     ],
+    "customEditors": [
+      {
+        "viewType": "pult.thread",
+        "displayName": "Pult Thread",
+        "selector": [
+          {
+            "filenamePattern": "pult-thread:/**"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "menus": {
       "commandPalette": [
         {
