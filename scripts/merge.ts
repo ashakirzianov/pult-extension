@@ -6,10 +6,15 @@
 // (extension/webview/t3/EDITS.md), so a pin bump merges rather than overwrites:
 // each copied file gets upstream's change between the recorded commit and the
 // pin by a three-way merge, conflicts are left marked for a human, files the
-// entry now reaches are added, and unedited files it no longer reaches go.
+// entry now reaches are added, and unedited files it no longer reaches go. A
+// merge that leaves conflicts writes the pin to extension/webview/t3/MERGING
+// rather than UPSTREAM; once the markers are resolved, running the merge again
+// records it. Every copied file that differs from upstream at the recorded
+// commit is listed in EDITS.md.
 //
 //   pnpm vendor:merge     merge upstream's apps/web at the pin into the copy
-//   pnpm vendor:check     also fails while the copy is at another commit
+//   pnpm vendor:check     also fails while the copy is at another commit, holds
+//                         conflict markers, or has an edit EDITS.md does not list
 import * as NodeFS from "node:fs";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -37,8 +42,11 @@ const COPY = `${WEBVIEW}/t3`;
 const OURS = `${WEBVIEW}/src`;
 const UPSTREAM_APP = "apps/web";
 const RECORD = `${COPY}/UPSTREAM`;
+// The commit a merge left with conflicts is merging to.
+const PENDING = `${COPY}/MERGING`;
+const EDITS = `${COPY}/EDITS.md`;
 // Files of ours inside the copy's directory, not upstream's.
-const COPY_OWN_FILES = new Set(["UPSTREAM", "EDITS.md"]);
+const COPY_OWN_FILES = new Set(["UPSTREAM", "MERGING", "EDITS.md"]);
 
 const CODE_EXTENSIONS = [".ts", ".tsx", ".d.ts", ".js", ".mjs", ".json", ".css"];
 const RESOLVE_SUFFIXES = [".ts", ".tsx", ".d.ts", ".js", "/index.ts", "/index.tsx"];
@@ -139,6 +147,52 @@ export function closure(input: {
 
 const BINARY = /\.(wasm|woff2?|ttf|otf|png|jpe?g|gif|webp|ico|mp3|wav|glb)$/;
 
+const CONFLICT_MARKER = /^(?:<{7}|\|{7}|>{7})(?: |$)/m;
+
+/** Whether a text file holds a conflict marker `git merge-file` leaves; binary files hold none. */
+export function hasConflictMarkers(file: string, content: Uint8Array): boolean {
+  return !BINARY.test(file) && CONFLICT_MARKER.test(new TextDecoder().decode(content));
+}
+
+/** The copy paths EDITS.md lists, one bullet each: `` - `src/a.ts`: why ``. */
+export function listedEdits(text: string): ReadonlySet<string> {
+  return new Set([...text.matchAll(/^[-*]\s+`([^`]+)`/gm)].map((match) => match[1]!));
+}
+
+/**
+ * What keeps the copy from being upstream's at the recorded commit plus the
+ * edits EDITS.md lists, one line each: conflict markers, an edit it does not
+ * list, and a listing of a file that is not edited. `upstream` is undefined
+ * for a file upstream does not have.
+ */
+export function copyDrift(input: {
+  readonly files: ReadonlyArray<{
+    readonly file: string;
+    readonly copy: Uint8Array;
+    readonly upstream: Uint8Array | undefined;
+  }>;
+  readonly listed: ReadonlySet<string>;
+}): Array<string> {
+  const drift: Array<string> = [];
+  const unlisted = new Set(input.listed);
+  for (const { file, copy, upstream } of input.files) {
+    unlisted.delete(file);
+    if (hasConflictMarkers(file, copy))
+      drift.push(`conflict  ${COPY}/${file}: resolve its markers`);
+    const edited = !sameBytes(copy, upstream);
+    if (edited && !input.listed.has(file)) {
+      drift.push(
+        `edited    ${COPY}/${file}: ${upstream === undefined ? "not upstream's" : "differs from upstream"}, and ${EDITS} does not list it`,
+      );
+    } else if (!edited && input.listed.has(file)) {
+      drift.push(`listed    ${COPY}/${file}: ${EDITS} lists it, but it is upstream's`);
+    }
+  }
+  for (const file of unlisted)
+    drift.push(`listed    ${COPY}/${file}: ${EDITS} lists it, but the copy has no such file`);
+  return drift;
+}
+
 export type MergeOutcome =
   | { readonly _tag: "Unchanged" }
   | { readonly _tag: "Write"; readonly content: Uint8Array }
@@ -211,11 +265,47 @@ const mergeFile = Effect.fn("mergeFile")(function* (
   ) as MergeOutcome;
 }, Effect.scoped);
 
-const readRecord = Effect.fn("readRecord")(function* (root: string) {
+/** The commit in UPSTREAM, or in another file of the copy that names one. */
+const readRecord = Effect.fn("readRecord")(function* (root: string, record = RECORD) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const file = path.join(root, RECORD);
+  const file = path.join(root, record);
   return (yield* fs.exists(file)) ? parsePin(yield* fs.readFileString(file)) : undefined;
+});
+
+const pinCommit = Effect.fn("pinCommit")(function* (checkout: string, root: string) {
+  const pin = yield* readPin(root);
+  return (yield* git(checkout, ["rev-parse", "--verify", "--quiet", `${pin}^{commit}`])).trim();
+});
+
+/** A merge that left conflicts, recorded once the copy holds no conflict markers. */
+const finishPending = Effect.fn("finishPending")(function* (
+  root: string,
+  pending: string,
+  pin: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  if (pending !== pin) {
+    return yield* new VendorError({
+      detail: `${PENDING} is a merge to ${pending}, and the pin is now ${pin}. Finish that merge at its pin first, or delete ${PENDING} and restore the copy to start over.`,
+    });
+  }
+  const copyDir = path.join(root, COPY);
+  const marked: Array<string> = [];
+  for (const file of yield* listTree(copyDir)) {
+    if (
+      !COPY_OWN_FILES.has(file) &&
+      hasConflictMarkers(file, yield* fs.readFile(path.join(copyDir, file)))
+    ) {
+      marked.push(file);
+    }
+  }
+  if (marked.length === 0) {
+    yield* fs.writeFileString(path.join(root, RECORD), `${pending}\n`);
+    yield* fs.remove(path.join(root, PENDING));
+  }
+  return { _tag: "Finished", commit: pending, marked } as const;
 });
 
 /** Every file under `dir`, relative to it. */
@@ -232,10 +322,13 @@ const listTree = Effect.fn("listTree")(function* (dir: string) {
 const isFile = (file: string) => NodeFS.existsSync(file) && NodeFS.statSync(file).isFile();
 const readText = (file: string) => NodeFS.readFileSync(file, "utf8");
 
-const merge = Effect.fn("merge")(function* (checkout: string) {
+/** Merges upstream's apps/web at the pin into the copy under `root`, a checkout of this repo. */
+export const merge = Effect.fn("merge")(function* (checkout: string, root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const root = yield* repoRoot;
+  const pending = yield* readRecord(root, PENDING);
+  if (pending !== undefined)
+    return yield* finishPending(root, pending, yield* pinCommit(checkout, root));
   const recorded = yield* readRecord(root);
   const { tree: theirsTree, commit } = yield* pinnedTree(checkout, yield* readPin(root), [
     UPSTREAM_APP,
@@ -300,12 +393,14 @@ const merge = Effect.fn("merge")(function* (checkout: string) {
 
   // 3. Write the copy: reached files, merged or new; unreached ones go unless edited.
   const kept: Array<string> = [];
+  const marked: Array<string> = [];
   let added = 0;
   let removed = 0;
   let updated = 0;
   for (const file of reached.files) {
     const target = path.join(copyDir, file);
     const content = merged.get(file) ?? (yield* fs.readFile(upstreamFile(theirsTree, file)));
+    if (hasConflictMarkers(file, content)) marked.push(file);
     const current = yield* readOptional(target);
     if (sameBytes(current, content)) continue;
     if (current === undefined) added += 1;
@@ -318,14 +413,16 @@ const merge = Effect.fn("merge")(function* (checkout: string) {
     const base =
       baseTree === undefined ? undefined : yield* readOptional(upstreamFile(baseTree, file));
     const ours = yield* fs.readFile(path.join(copyDir, file));
-    if (base !== undefined && !sameBytes(ours, base) && !upstreamDeleted.includes(file)) {
+    if (base !== undefined && !sameBytes(ours, base)) {
       kept.push(file);
+      if (hasConflictMarkers(file, ours)) marked.push(file);
       continue;
     }
     yield* fs.remove(path.join(copyDir, file));
     removed += 1;
   }
-  yield* fs.writeFileString(path.join(root, RECORD), `${commit}\n`);
+  // A copy with conflicts left is not at the pin until they are resolved.
+  yield* fs.writeFileString(path.join(root, marked.length === 0 ? RECORD : PENDING), `${commit}\n`);
 
   // Upstream's dependencies are the bundle's: a change there is a change to extension/package.json.
   const packageChanged =
@@ -335,6 +432,7 @@ const merge = Effect.fn("merge")(function* (checkout: string) {
       yield* readOptional(upstreamFile(theirsTree, "package.json")),
     );
   return {
+    _tag: "Merged",
     commit,
     recorded,
     files: reached.files.size,
@@ -342,29 +440,54 @@ const merge = Effect.fn("merge")(function* (checkout: string) {
     updated,
     removed,
     conflicts,
-    kept,
+    kept: kept.map((file) => ({ file, deletedUpstream: upstreamDeleted.includes(file) })),
+    marked,
     upstreamDeleted: upstreamDeleted.filter((file) => reached.files.has(file)),
     unresolved: reached.unresolved,
     packageChanged,
-  };
+  } as const;
 }, Effect.scoped);
 
-/** Whether the copy is at the pin; empty when it is. */
-export const checkCopy = Effect.fn("checkCopy")(function* (checkout: string) {
-  const root = yield* repoRoot;
+/**
+ * The copy under `root` against the pin and upstream at its recorded commit,
+ * one line per problem (`copyDrift`); empty when it is at the pin and differs
+ * from upstream only in the edits EDITS.md lists.
+ */
+export const checkCopy = Effect.fn("checkCopy")(function* (checkout: string, root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   const recorded = yield* readRecord(root);
-  const pin = (yield* git(checkout, [
-    "rev-parse",
-    "--verify",
-    "--quiet",
-    `${yield* readPin(root)}^{commit}`,
-  ])).trim();
-  return recorded === pin
-    ? []
-    : [
-        `changed   ${RECORD} (at ${recorded ?? "nothing"}, the pin is ${pin}); run pnpm vendor:merge`,
-      ];
-});
+  const pending = yield* readRecord(root, PENDING);
+  const pin = yield* pinCommit(checkout, root);
+  const drift =
+    pending !== undefined
+      ? [
+          `merging   ${PENDING} (to ${pending}): resolve the conflict markers, then run pnpm vendor:merge`,
+        ]
+      : recorded === pin
+        ? []
+        : [
+            `changed   ${RECORD} (at ${recorded ?? "nothing"}, the pin is ${pin}); run pnpm vendor:merge`,
+          ];
+  if (recorded === undefined) return drift;
+  const { tree } = yield* pinnedTree(checkout, recorded, [UPSTREAM_APP]);
+  const copyDir = path.join(root, COPY);
+  const files = [];
+  for (const file of yield* listTree(copyDir)) {
+    if (COPY_OWN_FILES.has(file)) continue;
+    const upstreamFile = path.join(tree, UPSTREAM_APP, file);
+    files.push({
+      file,
+      copy: yield* fs.readFile(path.join(copyDir, file)),
+      upstream: (yield* fs.exists(upstreamFile)) ? yield* fs.readFile(upstreamFile) : undefined,
+    });
+  }
+  const editsFile = path.join(root, EDITS);
+  const listed = listedEdits(
+    (yield* fs.exists(editsFile)) ? yield* fs.readFileString(editsFile) : "",
+  );
+  return [...drift, ...copyDrift({ files, listed })];
+}, Effect.scoped);
 
 const command = Command.make(
   "merge",
@@ -377,17 +500,30 @@ const command = Command.make(
   (flags) =>
     Effect.gen(function* () {
       const checkout = yield* resolveCheckout();
+      const root = yield* repoRoot;
       if (flags.check) {
-        const drift = yield* checkCopy(checkout);
+        const drift = yield* checkCopy(checkout, root);
         if (drift.length > 0) return yield* new VendorError({ detail: drift.join("\n") });
-        yield* Effect.log(`${COPY} is at the pin.`);
+        yield* Effect.log(`${COPY} is at the pin, with only the edits ${EDITS} lists.`);
         return;
       }
-      const result = yield* merge(checkout);
+      const result = yield* merge(checkout, root);
+      const unresolved = (marked: ReadonlyArray<string>) =>
+        new VendorError({
+          detail: `Not recorded: conflict markers remain in ${marked.join(", ")}. Resolve them, then run pnpm vendor:merge to record ${result.commit}.`,
+        });
+      if (result._tag === "Finished") {
+        if (result.marked.length > 0) return yield* unresolved(result.marked);
+        yield* Effect.log(`${COPY}: the merge to ${result.commit} is recorded.`);
+        return;
+      }
       const lines = [
         `${COPY}: ${result.recorded ?? "nothing"} -> ${result.commit}, ${result.files} files (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
         ...result.conflicts.map((line) => `conflict  ${line}`),
-        ...result.kept.map((file) => `kept      ${file}: no longer reached, but edited here`),
+        ...result.kept.map(
+          ({ file, deletedUpstream }) =>
+            `kept      ${file}: ${deletedUpstream ? "deleted upstream" : "no longer reached"}, but edited here`,
+        ),
         ...result.upstreamDeleted.map(
           (file) => `deleted   ${file}: gone upstream but still reached`,
         ),
@@ -397,6 +533,7 @@ const command = Command.make(
           : []),
       ];
       yield* Effect.log(lines.join("\n"));
+      if (result.marked.length > 0) return yield* unresolved(result.marked);
     }),
 ).pipe(Command.withDescription("Merge upstream's thread view at the pin into the tracked copy."));
 
