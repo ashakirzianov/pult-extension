@@ -6,9 +6,10 @@ describe("pult: paths", () => {
   it("carries POSIX and Windows host paths", () => {
     expect(toUriPath("/Users/anton/repos/pult/")).toBe("/Users/anton/repos/pult");
     expect(toHostPath(toUriPath("/Users/anton/x.ts"))).toBe("/Users/anton/x.ts");
-    expect(toUriPath("C:\\Users\\anton\\x.ts")).toBe("/C:/Users/anton/x.ts");
-    expect(toHostPath("/C:/Users/anton/x.ts")).toBe("C:/Users/anton/x.ts");
-    expect(toUriPath("C:\\")).toBe("/C:/");
+    // VS Code lowercases a drive letter in every URI it saves.
+    expect(toUriPath("C:\\Users\\anton\\x.ts")).toBe("/c:/Users/anton/x.ts");
+    expect(toHostPath("/c:/Users/anton/x.ts")).toBe("c:/Users/anton/x.ts");
+    expect(toUriPath("C:\\")).toBe("/c:/");
   });
 
   it("locates a path in the innermost root, never in a sibling sharing a prefix", () => {
