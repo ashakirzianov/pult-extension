@@ -13,4 +13,7 @@ export const STUBS: Readonly<Record<string, string>> = {
   // The device panel's 3D phone models, 12 MB of assets: the panel shows the
   // flat stream without them.
   "src/components/device/deviceModels.ts": "src/stubs/deviceModels.ts",
+  // The composer's deferred storage, written at once: a hidden tab's page is
+  // dropped without the unload that flushes it.
+  "src/lib/storage.ts": "src/stubs/storage.ts",
 };

@@ -5,7 +5,11 @@ export default defineConfig({
   test: {
     environment: "node",
     // The vendored packages' own tests are the fork's to run.
-    include: ["extension/src/**/*.test.ts", "scripts/**/*.test.ts"],
+    include: [
+      "extension/src/**/*.test.ts",
+      "extension/webview/src/**/*.test.ts",
+      "scripts/**/*.test.ts",
+    ],
   },
   fmt: {
     ignorePatterns: [

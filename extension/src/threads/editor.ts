@@ -5,12 +5,14 @@ import type { WindowConnection } from "../connection/service.ts";
 import type { ThreadsModel } from "./model.ts";
 import type {
   HostMessage,
+  TabStorage,
   ThreadTarget,
   Unavailable,
   WebviewEnvironment,
   WebviewMessage,
 } from "./protocol.ts";
 import type { SocketHub, VirtualSocket } from "./socketHub.ts";
+import { applyChanges } from "./tabStorage.ts";
 import {
   draftUri,
   parseThreadUri,
@@ -58,7 +60,7 @@ export class ThreadEditorProvider
   private readonly deps: Dependencies;
   private readonly panels = new Set<ThreadPanel>();
   /** Storage for a tab about to open at a URI, carried from the tab it replaces. */
-  private readonly seeds = new Map<string, Readonly<Record<string, string>>>();
+  private readonly seeds = new Map<string, TabStorage>();
   private readonly subscriptions: Array<vscode.Disposable>;
   private boundEnvironmentId: string | null;
 
@@ -219,6 +221,8 @@ export class ThreadEditorProvider
           tab.input.viewType === THREAD_VIEW_TYPE &&
           tab.input.uri.toString() === panel.uri.toString(),
       );
+    // The page's last writes, before its storage moves to the new tab.
+    await panel.flush();
     if (panel.storage !== null) this.seeds.set(uri.toString(), panel.storage);
     await vscode.commands.executeCommand("vscode.openWith", uri, THREAD_VIEW_TYPE, {
       preview: false,
@@ -235,6 +239,9 @@ export class ThreadEditorProvider
 
 const PROMOTION_WAIT_MS = 10_000;
 
+// A page that is still loading cannot answer a flush; its writes are all in.
+const FLUSH_WAIT_MS = 1_000;
+
 // A send waits for the composer to offer to send, which the page bounds itself.
 const TEST_ANSWER_MS = 45_000;
 
@@ -242,9 +249,11 @@ const TEST_ANSWER_MS = 45_000;
 class ThreadPanel {
   readonly uri: vscode.Uri;
   readonly resource: ThreadResource;
-  /** The webview's storage as it last reported it, carried into a reopened tab. */
-  storage: Readonly<Record<string, string>> | null;
+  /** The page's storage as of its last report, carried into a reopened tab. */
+  storage: TabStorage | null;
   reopening = false;
+  /** Whether the page is up: it said `ready`, and the tab has not hidden since. */
+  private live = false;
   private readonly provider: ThreadEditorProvider;
   private readonly panel: vscode.WebviewPanel;
   private readonly sockets = new Map<number, VirtualSocket>();
@@ -253,7 +262,8 @@ class ThreadPanel {
     number,
     (result: { text: string; error: string | null }) => void
   >();
-  private nextTestId = 1;
+  private readonly flushes = new Map<number, () => void>();
+  private nextRequestId = 1;
   private readonly subscription: vscode.Disposable;
   private origin: string | null = null;
 
@@ -262,7 +272,7 @@ class ThreadPanel {
     uri: vscode.Uri,
     resource: ThreadResource,
     panel: vscode.WebviewPanel,
-    storage: Readonly<Record<string, string>> | null,
+    storage: TabStorage | null,
   ) {
     this.provider = provider;
     this.uri = uri;
@@ -304,7 +314,7 @@ class ThreadPanel {
       | { readonly type: "test.send"; readonly text: string },
   ): Promise<string> {
     if (!this.provider.development) return Promise.reject(new Error("Test hooks are off."));
-    const requestId = this.nextTestId++;
+    const requestId = this.nextRequestId++;
     return new Promise((resolve, reject) => {
       // A page that never loaded never answers.
       const timer = setTimeout(() => {
@@ -317,6 +327,22 @@ class ThreadPanel {
         else reject(new Error(error));
       });
       this.post({ ...message, requestId });
+    });
+  }
+
+  /** Resolves once the page has reported every write so far; a page that is not up has. */
+  flush(): Promise<void> {
+    if (!this.live) return Promise.resolve();
+    const requestId = this.nextRequestId++;
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        this.flushes.delete(requestId);
+        resolve();
+      };
+      const timer = setTimeout(done, FLUSH_WAIT_MS);
+      this.flushes.set(requestId, done);
+      this.post({ type: "flush", requestId });
     });
   }
 
@@ -341,6 +367,10 @@ class ThreadPanel {
       case "ready":
         // A page loading again after the tab was hidden starts from nothing.
         this.closeTransport();
+        this.live = true;
+        // The page's own storage, after hiding or a window reload, or else
+        // what the host has: a reopened tab's carried storage.
+        this.storage = message.storage ?? this.storage ?? {};
         this.post({
           type: "init",
           target: this.resource.target,
@@ -376,7 +406,10 @@ class ThreadPanel {
         this.fetches.delete(message.requestId);
         return;
       case "storage":
-        this.storage = message.storage;
+        this.storage = applyChanges(this.storage ?? {}, message.changes);
+        return;
+      case "flushed":
+        this.flushes.get(message.requestId)?.();
         return;
       case "promoted":
         this.provider.promoted(this, message.threadId);
@@ -444,6 +477,9 @@ class ThreadPanel {
   }
 
   closeTransport() {
+    // The page is gone, and its writes with it are all in.
+    this.live = false;
+    for (const done of this.flushes.values()) done();
     for (const socket of this.sockets.values()) socket.close();
     this.sockets.clear();
     for (const controller of this.fetches.values()) controller.abort();

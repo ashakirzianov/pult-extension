@@ -19,6 +19,12 @@ export interface WebviewEnvironment {
   readonly bearer: string;
 }
 
+/** A tab's `localStorage` (`webview/src/storage.ts`), as the host keeps it. */
+export type TabStorage = Readonly<Record<string, string>>;
+
+/** Writes to a tab's storage, oldest first: a key and its value, or null where it was removed. */
+export type StorageChanges = ReadonlyArray<readonly [key: string, value: string | null]>;
+
 /** Why a tab cannot show its thread, in place of an environment. */
 export type Unavailable =
   | { readonly reason: "unbound" }
@@ -29,8 +35,8 @@ export type HostMessage =
       readonly type: "init";
       readonly target: ThreadTarget;
       readonly environment: WebviewEnvironment | Unavailable;
-      /** The webview storage the tab had, when the host reopened it at a new URI. */
-      readonly storage: Readonly<Record<string, string>> | null;
+      /** The storage the page starts from: its own, or the one the tab it replaces had. */
+      readonly storage: TabStorage;
       /** Outside production the page answers the headless load's `test.*` messages. */
       readonly development: boolean;
     }
@@ -53,12 +59,15 @@ export type HostMessage =
   | { readonly type: "fetch.failed"; readonly requestId: number; readonly message: string }
   /** The host's connection is ready again: a webview waiting to reconnect retries now. */
   | { readonly type: "wakeup" }
+  /** Answered by `flushed` once every write before it has been reported. */
+  | { readonly type: "flush"; readonly requestId: number }
   /** The headless load reads the page's text, or sends a message through its composer. */
   | { readonly type: "test.probe"; readonly requestId: number }
   | { readonly type: "test.send"; readonly requestId: number; readonly text: string };
 
 export type WebviewMessage =
-  | { readonly type: "ready" }
+  /** The page loaded, with the storage it saved before, if this tab's page ran before. */
+  | { readonly type: "ready"; readonly storage: TabStorage | null }
   | { readonly type: "socket.open"; readonly socketId: number }
   | { readonly type: "socket.send"; readonly socketId: number; readonly data: string }
   | { readonly type: "socket.close"; readonly socketId: number }
@@ -71,8 +80,9 @@ export type WebviewMessage =
       readonly body: ArrayBuffer | null;
     }
   | { readonly type: "fetch.abort"; readonly requestId: number }
-  /** The webview's storage after a write, for the host to carry into a reopened tab. */
-  | { readonly type: "storage"; readonly storage: Readonly<Record<string, string>> }
+  /** Writes to the page's storage, reported as they happen, for the host to carry into a reopened tab. */
+  | { readonly type: "storage"; readonly changes: StorageChanges }
+  | { readonly type: "flushed"; readonly requestId: number }
   /** A draft tab's first message created its thread. */
   | { readonly type: "promoted"; readonly threadId: string }
   /** The thread view navigated to another thread, which belongs in its own tab. */

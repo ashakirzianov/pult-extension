@@ -5,12 +5,13 @@
 import type { Unavailable } from "../../src/threads/protocol.ts";
 import { installBridgedFetch, nextHostMessage, post } from "./bridge.ts";
 import { startSession } from "./session.ts";
-import { installStorage, savedStorage } from "./storage.ts";
+import { answerFlushes, installStorage, savedStorage } from "./storage.ts";
 import { installProbe } from "./probe.ts";
 import { followVsCodeTheme } from "./theme.ts";
 
 // The host only sends `test.*` messages outside production.
 installProbe();
+answerFlushes();
 // The page's errors go to the extension host's log.
 window.addEventListener("error", (event) =>
   post({ type: "log", text: String(event.error ?? event.message) }),
@@ -27,9 +28,9 @@ async function start() {
     return null;
   };
   const init = nextHostMessage("init");
-  post({ type: "ready" });
+  post({ type: "ready", storage: savedStorage() });
   const { target, environment, storage, development } = await init;
-  installStorage(savedStorage() ?? storage ?? {});
+  installStorage(storage);
   const root = document.getElementById("root")!;
   if ("reason" in environment) {
     showUnavailable(root, environment);
