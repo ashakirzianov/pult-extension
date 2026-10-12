@@ -10,6 +10,7 @@ import {
 import { type ProjectWatchEntriesEvent, WS_METHODS } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
@@ -22,6 +23,7 @@ const STOCK_FEATURES = featuresOf({});
 
 /** How long a call waits for a connecting window before it fails as unavailable. */
 const READY_TIMEOUT_MS = 15_000;
+const RESUBSCRIBE_DELAY = "1 second";
 
 /**
  * The workspace's server: the window's connection. A call made while the
@@ -174,8 +176,9 @@ function watchSession(session: RpcSession, cwd: string): Stream.Stream<WatchItem
         Stream.map((event): WatchItem => ({ _tag: "changed", event })),
       ),
     ),
-    // The server's watcher closed: subscribe again.
-    Stream.concat(Stream.suspend(() => watchSession(session, cwd))),
+    // The server's watcher closed: subscribe again, spaced, since a closing
+    // watcher may answer the next subscription by ending it at once.
+    Stream.repeat(Schedule.spaced(RESUBSCRIBE_DELAY)),
     Stream.catch((error) =>
       error._tag === "ProjectWatchEntriesError" && error.failure === "workspace_root_not_found"
         ? Stream.succeed(gone)
