@@ -10,8 +10,9 @@
 // server's machine, which must be this one, also opens it as the workspace folder. The
 // run seeds it with hello.txt for the load to read and write and, once the load writes
 // .pult-test-change, changes hello.txt on disk for the open tab to pick up through the
-// server's watch; pixel.bin, binary, the load reads over the asset route. PULT_TEST_STOCK=1
-// makes the workspace treat the server as stock.
+// server's watch; link.txt, a symlink to hello.txt, the load opens; pixel.bin, binary, the
+// load reads over the asset route. PULT_TEST_STOCK=1 makes the workspace treat the server
+// as stock.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
@@ -47,7 +48,10 @@ if (folderPath !== undefined) {
   NodeFS.mkdirSync(folderPath, { recursive: true });
   NodeFS.writeFileSync(NodePath.join(folderPath, "hello.txt"), "hello\n");
   NodeFS.writeFileSync(NodePath.join(folderPath, "pixel.bin"), new Uint8Array([0x89, 0, 0xff, 1]));
-  NodeFS.rmSync(NodePath.join(folderPath, ".pult-test-change"), { force: true });
+  for (const name of [".pult-test-change", "link.txt", "hello copy.txt", "pixel copy.bin"]) {
+    NodeFS.rmSync(NodePath.join(folderPath, name), { force: true });
+  }
+  NodeFS.symlinkSync("hello.txt", NodePath.join(folderPath, "link.txt"));
 }
 const load = NodeChildProcess.spawn(
   "pnpm",

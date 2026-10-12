@@ -72,8 +72,9 @@ export async function run() {
 }
 
 /**
- * The folder testWeb.ts seeded: read and write hello.txt, then, on a stock server, see a
- * binary read and a file creation refused, or else read pixel.bin's bytes, and have the run
+ * The folder testWeb.ts seeded: read and write hello.txt and open link.txt, its symlink,
+ * then, on a stock server, see a binary read, a file creation and a copy refused, or else
+ * read pixel.bin's bytes, copy hello.txt and see pixel.bin's copy refused, and have the run
  * change hello.txt on disk and see its open document pick the change up through the
  * server's watch, with no turn ending.
  */
@@ -94,6 +95,9 @@ async function useFolder(folder: vscode.Uri) {
   const read = new TextDecoder().decode(await vscode.workspace.fs.readFile(hello));
   if (read !== written) throw new Error(`hello.txt reads ${read} after the write.`);
   console.log(`Read and wrote hello.txt in ${folder.toString()}.`);
+  const link = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(folder, "link.txt"));
+  if (link.getText() !== written) throw new Error(`link.txt reads ${link.getText()}.`);
+  console.log("Opened link.txt, a symlink.");
 
   const pixel = vscode.Uri.joinPath(folder, "pixel.bin");
   const marker = vscode.Uri.joinPath(folder, ".pult-test-change");
@@ -108,12 +112,24 @@ async function useFolder(folder: vscode.Uri) {
       (error: unknown) => error instanceof vscode.FileSystemError && error.code === "NoPermissions",
     );
     if (!refused) throw new Error("The workspace created a file on a stock server.");
-    console.log("A stock server's workspace refused a binary read and a file creation.");
+    if (!(await refusesCopy(hello, vscode.Uri.joinPath(folder, "hello copy.txt")))) {
+      throw new Error("The workspace copied a file on a stock server.");
+    }
+    console.log("A stock server's workspace refused a binary read, a file creation and a copy.");
     return;
   }
   const bytes = [...(await vscode.workspace.fs.readFile(pixel))];
   if (bytes.join() !== "137,0,255,1") throw new Error(`pixel.bin reads ${bytes.join()}.`);
   console.log("Read pixel.bin's bytes over the asset route.");
+  const copy = vscode.Uri.joinPath(folder, "hello copy.txt");
+  await vscode.workspace.fs.copy(hello, copy);
+  const copied = new TextDecoder().decode(await vscode.workspace.fs.readFile(copy));
+  if (copied !== written) throw new Error(`hello copy.txt reads ${copied}.`);
+  await vscode.workspace.fs.delete(copy);
+  if (!(await refusesCopy(pixel, vscode.Uri.joinPath(folder, "pixel copy.bin")))) {
+    throw new Error("The workspace copied pixel.bin, which the server cannot write.");
+  }
+  console.log("Copied hello.txt, and refused to copy pixel.bin.");
   await vscode.workspace.fs.writeFile(marker, new Uint8Array());
   await new Promise<void>((resolve, reject) => {
     const check = () => {
@@ -136,6 +152,13 @@ async function useFolder(folder: vscode.Uri) {
   });
   await vscode.workspace.fs.delete(marker);
   console.log("The open hello.txt picked up a change on the host through the watch.");
+}
+
+function refusesCopy(source: vscode.Uri, target: vscode.Uri): Thenable<boolean> {
+  return vscode.workspace.fs.copy(source, target).then(
+    () => false,
+    (error: unknown) => error instanceof vscode.FileSystemError && error.code === "NoPermissions",
+  );
 }
 
 type Environment = NonNullable<PultTestApi["environment"]>;
