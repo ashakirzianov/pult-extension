@@ -33,6 +33,14 @@ export type Unavailable =
   | { readonly reason: "unbound" }
   | { readonly reason: "other-environment"; readonly label: string };
 
+/** The commands a page may ask the host to run: its messages are typed, but not checked, on the way in. */
+const PAGE_COMMANDS: ReadonlySet<unknown> = new Set(["pult.connect"] satisfies Array<PageCommand>);
+type PageCommand = Extract<WebviewMessage, { type: "command" }>["command"];
+
+export function isPageCommand(command: unknown): command is PageCommand {
+  return PAGE_COMMANDS.has(command);
+}
+
 export type HostMessage =
   | {
       readonly type: "init";

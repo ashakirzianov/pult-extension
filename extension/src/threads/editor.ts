@@ -3,14 +3,15 @@ import * as vscode from "vscode";
 import type { EnvironmentCatalog } from "../connection/catalog.ts";
 import type { WindowConnection } from "../connection/service.ts";
 import type { ThreadsModel } from "./model.ts";
-import type {
-  HostMessage,
-  StorageChanges,
-  TabStorage,
-  ThreadTarget,
-  Unavailable,
-  WebviewEnvironment,
-  WebviewMessage,
+import {
+  type HostMessage,
+  isPageCommand,
+  type StorageChanges,
+  type TabStorage,
+  type ThreadTarget,
+  type Unavailable,
+  type WebviewEnvironment,
+  type WebviewMessage,
 } from "./protocol.ts";
 import type { SocketHub, VirtualSocket } from "./socketHub.ts";
 import { applyChanges, CarriedStorage, fillShare, shareChanges } from "./tabStorage.ts";
@@ -468,7 +469,7 @@ class ThreadPanel {
         return;
       }
       case "command":
-        void vscode.commands.executeCommand(message.command);
+        if (isPageCommand(message.command)) void vscode.commands.executeCommand(message.command);
         return;
       case "log":
         console.error(`[pult thread tab ${this.uri.path}] ${message.text}`);
