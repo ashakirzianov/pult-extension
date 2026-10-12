@@ -403,13 +403,13 @@
         "command": "pult.goToFile",
         "key": "ctrl+p",
         "mac": "cmd+p",
-        "when": "virtualWorkspace == pult"
+        "when": "virtualWorkspace == pult && pult.bound"
       },
       {
         "command": "pult.searchInFiles",
         "key": "ctrl+shift+f",
         "mac": "cmd+shift+f",
-        "when": "virtualWorkspace == pult"
+        "when": "virtualWorkspace == pult && pult.bound"
       }
     ],
     "colors": [
