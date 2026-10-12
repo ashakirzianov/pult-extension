@@ -165,26 +165,34 @@ const utf8 = new TextEncoder();
  * the `pult:` file system provider, without VS Code's types.
  *
  * VS Code refuses to save over a file whose stat is newer and of another size
- * than when it was read. A file changed since the provider served its contents
- * therefore always stats at a size other than the one served. On a stock
- * server, which has no `statEntry`, a stat is synthesized: the kind from the
- * parent's listing, and the mtime and size counters, bumped on the provider's
- * own writes and when a file's contents are found changed at turn end.
+ * than the stat its editor recorded, and stats it again before it writes. On a
+ * server with versions, an open file changed since its contents were served is
+ * reported so that this check always refuses (`report`), and a write expects
+ * the version served. On a stock server, which has no `statEntry`, a stat is
+ * synthesized: the kind from the parent's listing, and the mtime and size
+ * counters, bumped on the provider's own writes and when a file's contents
+ * are found changed at turn end.
  */
 export class WorkspaceFiles implements Disposable {
   private readonly server: WorkspaceServer;
   private readonly host: WorkspaceFilesHost;
+  private readonly now: () => number;
   private readonly epoch: number;
   private clock: number;
   /**
-   * The version each file was last read, stat'd or written at, for writeFile's
-   * `expectedVersion`. A stat counts, so VS Code's Overwrite can follow its
-   * modified-since refusal; the version then guards the gap between VS Code's
-   * stat and the write.
+   * The version of the contents last served or written, which an open editor
+   * is taken to hold, and writeFile's `expectedVersion`.
    */
-  private readonly versions = new Map<string, string>();
-  /** The version and size of the contents last served or written, to tell a file changed since. */
-  private readonly served = new Map<string, { readonly version: string; readonly size: number }>();
+  private readonly served = new Map<string, string>();
+  /** The highest mtime and size each file was reported at. */
+  private readonly reported = new Map<string, { readonly mtime: number; readonly size: number }>();
+  /**
+   * What a write may overwrite, by the latest stat of the file: the version of
+   * a file it reported changed, since VS Code's check refuses to save over that
+   * and a write that follows skipped the check, as Overwrite does; or nothing,
+   * for a file it found missing, which the write creates.
+   */
+  private readonly overwritable = new Map<string, string | undefined>();
   /** Each file's contents as last read or written, digested, to tell a changed file on a stock server. */
   private readonly digests = new Map<string, string>();
   private readonly mtimes = new Map<string, number>();
@@ -194,11 +202,12 @@ export class WorkspaceFiles implements Disposable {
   private readonly watches = new Map<string, Disposable>();
   private readonly listings = new Map<string, Promise<ReadonlyArray<ProjectEntry>>>();
 
-  constructor(server: WorkspaceServer, host: WorkspaceFilesHost, now = Date.now()) {
+  constructor(server: WorkspaceServer, host: WorkspaceFilesHost, now: () => number = Date.now) {
     this.server = server;
     this.host = host;
-    this.epoch = now;
-    this.clock = now;
+    this.now = now;
+    this.epoch = now();
+    this.clock = this.epoch;
   }
 
   async stat(path: string): Promise<Stat> {
@@ -208,21 +217,25 @@ export class WorkspaceFiles implements Disposable {
     // A file that turned read-only reads 1 ms newer, so its open editor re-reads it and takes that.
     const nudge = this.readOnly.has(path) ? 1 : 0;
     if (features.fileVersions) {
-      const entry = await this.server
-        .statEntry({ cwd: target.cwd, relativePath: target.relativePath })
-        .catch(failed(path));
-      if (entry.kind === "file") this.versions.set(path, entry.version);
-      const served = this.served.get(path);
-      const changed =
-        served !== undefined &&
-        served.version !== entry.version &&
-        this.host.openPaths().includes(path);
+      let entry: ProjectStatEntryResult;
+      try {
+        entry = await this.server.statEntry({ cwd: target.cwd, relativePath: target.relativePath });
+      } catch (error) {
+        const failure = toFilesError(error, path);
+        if (failure.code === "FileNotFound") this.overwritable.set(path, undefined);
+        else this.overwritable.delete(path);
+        throw failure;
+      }
+      const { mtime, size } =
+        entry.kind === "file"
+          ? this.report(path, entry, readonly, nudge)
+          : { mtime: entry.mtimeMs, size: entry.size };
       return {
         kind: entry.kind,
         symlink: entry.symlink,
         ctime: entry.birthtimeMs,
-        mtime: entry.mtimeMs + nudge,
-        size: changed && entry.size === served.size ? entry.size + 1 : entry.size,
+        mtime,
+        size,
         readonly,
       };
     }
@@ -274,13 +287,9 @@ export class WorkspaceFiles implements Disposable {
       setTimeout(() => this.host.changed([{ path, kind: "changed" }]), 0);
     }
     // A truncated read has no version, so it can never be written back as the whole file.
-    if (result.version === undefined) {
-      this.versions.delete(path);
-      this.served.delete(path);
-    } else {
-      this.versions.set(path, result.version);
-      this.served.set(path, { version: result.version, size: result.byteLength });
-    }
+    if (result.version === undefined) this.served.delete(path);
+    else this.served.set(path, result.version);
+    this.overwritable.delete(path);
     this.digests.set(path, digest(result.contents));
     return bytes;
   }
@@ -303,8 +312,10 @@ export class WorkspaceFiles implements Disposable {
       );
     }
     const features = await this.server.features();
-    // Taken before the existence check, whose stat would refresh it.
-    const expectedVersion = features.fileVersions ? this.versions.get(path) : undefined;
+    // Taken before the existence check, whose stat would replace it.
+    const expected = this.overwritable.has(path)
+      ? this.overwritable.get(path)
+      : this.served.get(path);
     const exists =
       !features.entryMutations || !options.create || !options.overwrite
         ? await this.exists(path)
@@ -314,6 +325,8 @@ export class WorkspaceFiles implements Disposable {
     if (exists === false && !features.entryMutations) {
       throw new FilesError("NoPermissions", MUTATIONS_UNSUPPORTED);
     }
+    // A new file has no version to expect.
+    const expectedVersion = features.fileVersions && exists !== false ? expected : undefined;
     const result = await this.server
       .writeFile({
         cwd: toHostPath(folder.root),
@@ -323,9 +336,9 @@ export class WorkspaceFiles implements Disposable {
       })
       .catch(failed(path));
     if (features.fileVersions && result.version !== undefined) {
-      this.versions.set(path, result.version);
-      this.served.set(path, { version: result.version, size: content.length });
+      this.served.set(path, result.version);
     }
+    this.overwritable.delete(path);
     this.digests.set(path, digest(contents));
     this.bump(path);
     this.host.changed([{ path, kind: exists === false ? "created" : "changed" }]);
@@ -503,6 +516,40 @@ export class WorkspaceFiles implements Disposable {
     }
   }
 
+  /**
+   * The mtime and size VS Code is told for a file on a server with versions.
+   * An editor's recorded stat is an earlier report, or one from before a
+   * reload, so a writable open file not at the version served, or never
+   * served, as an editor restored from a backup is not, is reported above
+   * them all: later than every mtime reported for it and than the clock, and
+   * at a size above every one reported, plus half a byte, which no real file
+   * has. VS Code then refuses to save over it, whatever the change did to the
+   * file's real mtime and size.
+   */
+  private report(
+    path: string,
+    entry: ProjectStatEntryResult,
+    readonly: boolean,
+    nudge: number,
+  ): { mtime: number; size: number } {
+    const last = this.reported.get(path);
+    const changed =
+      !readonly && this.served.get(path) !== entry.version && this.host.openPaths().includes(path);
+    const reported = changed
+      ? {
+          mtime: Math.max(entry.mtimeMs, this.now(), (last?.mtime ?? -Infinity) + 1),
+          size: Math.max(entry.size, Math.ceil(last?.size ?? 0)) + 0.5,
+        }
+      : { mtime: entry.mtimeMs + nudge, size: entry.size };
+    this.reported.set(path, {
+      mtime: Math.max(reported.mtime, last?.mtime ?? -Infinity),
+      size: Math.max(reported.size, last?.size ?? 0),
+    });
+    if (changed) this.overwritable.set(path, entry.version);
+    else this.overwritable.delete(path);
+    return reported;
+  }
+
   /** A stock server's stat: a file outside the folders is taken for a file until a read says otherwise. */
   private async listedKind(
     path: string,
@@ -597,7 +644,7 @@ export class WorkspaceFiles implements Disposable {
    * stats as it did before.
    */
   private forget(path: string): void {
-    for (const known of [this.versions, this.served, this.digests, this.readOnly]) {
+    for (const known of [this.served, this.overwritable, this.digests, this.readOnly]) {
       for (const key of known.keys()) if (relativeTo(path, key) !== undefined) known.delete(key);
     }
     for (const key of this.mtimes.keys()) {

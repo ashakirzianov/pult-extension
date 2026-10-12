@@ -31,7 +31,10 @@ const READ_LIMIT = 64;
 
 /** A host filesystem behind the project RPCs, with the server's failures as tagged errors. */
 class FakeServer implements WorkspaceServer {
-  readonly files = new Map<string, { contents: string; byteLength: number; version: number }>();
+  readonly files = new Map<
+    string,
+    { contents: string; bytes: Uint8Array; version: number; mtime: number }
+  >();
   readonly directories = new Set<string>();
   readonly ignored = new Set<string>();
   readonly writes: Array<{ path: string; expectedVersion: string | undefined }> = [];
@@ -43,18 +46,22 @@ class FakeServer implements WorkspaceServer {
     this.enabled = enabled;
   }
 
-  /** The host, or an agent, changing a file behind the client's back. */
-  put(path: string, contents: string) {
-    this.putBytes(path, new TextEncoder().encode(contents));
+  /**
+   * The host, or an agent, changing a file behind the client's back. Its mtime
+   * moves on unless given, as `cp -p` or a coarse clock may leave it.
+   */
+  put(path: string, contents: string, mtime?: number) {
+    this.putBytes(path, new TextEncoder().encode(contents), mtime);
   }
 
   /** A file the server reads as its readFile does: UTF-8, leniently, dropping a BOM. */
-  putBytes(path: string, bytes: Uint8Array) {
+  putBytes(path: string, bytes: Uint8Array, mtime?: number) {
     for (let parent = dirname(path); parent !== "/"; parent = dirname(parent)) {
       this.directories.add(parent);
     }
     const contents = new TextDecoder("utf-8").decode(bytes);
-    this.files.set(path, { contents, byteLength: bytes.length, version: this.nextVersion++ });
+    const version = this.nextVersion++;
+    this.files.set(path, { contents, bytes, version, mtime: mtime ?? version });
   }
 
   features = async () => this.enabled;
@@ -79,11 +86,11 @@ class FakeServer implements WorkspaceServer {
     const file = this.files.get(path);
     if (file === undefined) throw failure("ProjectReadFileError", "path_not_found");
     if (file.contents.includes("\0")) throw failure("ProjectReadFileError", "binary_file");
-    const truncated = file.byteLength > READ_LIMIT;
+    const truncated = file.bytes.length > READ_LIMIT;
     return {
       relativePath,
       contents: file.contents.slice(0, READ_LIMIT),
-      byteLength: file.byteLength,
+      byteLength: file.bytes.length,
       truncated,
       ...(this.enabled.fileVersions && !truncated ? { version: `v${file.version}` } : {}),
     };
@@ -99,8 +106,8 @@ class FakeServer implements WorkspaceServer {
       relativePath,
       kind: file === undefined ? ("directory" as const) : ("file" as const),
       symlink: false,
-      size: file?.byteLength ?? 0,
-      mtimeMs: file?.version ?? 0,
+      size: file?.bytes.length ?? 0,
+      mtimeMs: file?.mtime ?? 0,
       birthtimeMs: 0,
       version: `v${file?.version ?? 0}`,
     };
@@ -168,7 +175,7 @@ class FakeServer implements WorkspaceServer {
   readAsset = async (cwd: string, relativePath: string) => {
     const file = this.files.get(resolve(cwd, relativePath));
     if (file === undefined) throw failure("AssetError", "path_not_found");
-    return new TextEncoder().encode(file.contents);
+    return file.bytes;
   };
 
   watchEntries = (cwd: string, listener: WatchListener) => {
@@ -199,6 +206,11 @@ function setup(enabled: Features, open: Array<string> = []) {
   server.directories.add(ROOT);
   server.directories.add(OTHER_PROJECT);
   server.put(`${ROOT}/src/a.ts`, "export const a = 1;\n");
+  return { server, ...openWindow(server, open) };
+}
+
+/** A window's files over `server`; another window over the same server is a reload. */
+function openWindow(server: FakeServer, open: Array<string>) {
   const changes: Array<Change> = [];
   const decorated: Array<string> = [];
   const readOnly: Array<[string, string]> = [];
@@ -212,9 +224,9 @@ function setup(enabled: Features, open: Array<string> = []) {
       decorated: (paths) => void decorated.push(...paths),
       openedReadOnly: (path, reason) => void readOnly.push([path, reason]),
     },
-    1_000,
+    () => 1_000,
   );
-  return { server, files, changes, decorated, readOnly };
+  return { files, changes, decorated, readOnly };
 }
 
 const text = (value: string) => new TextEncoder().encode(value);
@@ -430,6 +442,74 @@ describe("WorkspaceFiles on a server with the fork's features", () => {
     await files.stat(`${ROOT}/src/a.ts`);
     await files.writeFile(`${ROOT}/src/a.ts`, text("export const a = 2;\n"), SAVE);
     expect(server.files.get(`${ROOT}/src/a.ts`)?.contents).toBe("export const a = 2;\n");
+  });
+
+  it("has VS Code refuse a save over a same-size change whose mtime is no newer", async () => {
+    const path = `${ROOT}/src/a.ts`;
+    const open: Array<string> = [];
+    const { server, files } = setup(CAPABLE, open);
+    // VS Code's load stats and reads, then the document is open.
+    const loaded = await files.stat(path);
+    await files.readFile(path);
+    open.push(path);
+
+    // `cp -p`, `rsync -t`, `tar x` or a coarse clock: the agent's version stats no newer.
+    server.put(path, "export const a = 9;\n", loaded.mtime);
+    expect(vscodeRefusesSave(loaded, await files.stat(path))).toBe(true);
+  });
+
+  it("has VS Code refuse a save when its first stat saw a newer version than its read", async () => {
+    const path = `${ROOT}/src/a.ts`;
+    const open: Array<string> = [];
+    const { server, files } = setup(CAPABLE, open);
+    // VS Code's first open stats and reads at once: the read answers, an agent writes, then the stat.
+    await files.readFile(path);
+    server.put(path, "export const a = 9;\n");
+    const loaded = await files.stat(path);
+    open.push(path);
+
+    expect(vscodeRefusesSave(loaded, await files.stat(path))).toBe(true);
+  });
+
+  it("has VS Code refuse a save after an agent wrote between its write and the stat after it", async () => {
+    const path = `${ROOT}/src/a.ts`;
+    const { server, files } = setup(CAPABLE, [path]);
+    await files.readFile(path);
+    await files.stat(path);
+    await files.writeFile(path, text("export const a = 2;\n"), SAVE);
+    server.put(path, "export const a = 9;\n");
+    const written = await files.stat(path);
+
+    expect(vscodeRefusesSave(written, await files.stat(path))).toBe(true);
+  });
+
+  it("has VS Code refuse a save of an editor restored from before a reload", async () => {
+    const path = `${ROOT}/src/a.ts`;
+    const { server, files } = setup(CAPABLE);
+    // The dirty editor's stat, recorded by the window before the reload.
+    const recorded = await files.stat(path);
+    await files.readFile(path);
+    server.put(path, "export const a = 9;\n", recorded.mtime);
+
+    const reloaded = openWindow(server, [path]).files;
+    expect(vscodeRefusesSave(recorded, await reloaded.stat(path))).toBe(true);
+    // Overwrite: VS Code stats again and writes over the agent's version.
+    await reloaded.stat(path);
+    await reloaded.writeFile(path, text("export const a = 2;\n"), SAVE);
+    expect(server.files.get(path)?.contents).toBe("export const a = 2;\n");
+  });
+
+  it("writes over the version it served, not the one it last stat'd", async () => {
+    const path = `${ROOT}/src/a.ts`;
+    const { server, files } = setup(CAPABLE);
+    await files.readFile(path);
+    server.put(path, "export const a = 'agent';\n");
+    await files.stat(path);
+
+    const error = await rejection(files.writeFile(path, text("export const a = 'user';\n"), SAVE));
+
+    expect(error.message).toMatch(/changed on the host since Pult read it/);
+    expect(server.files.get(path)?.contents).toBe("export const a = 'agent';\n");
   });
 
   it("fails a save over a change made after VS Code's last stat", async () => {
