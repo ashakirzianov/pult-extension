@@ -12,13 +12,13 @@ import type {
   WebviewMessage,
 } from "./protocol.ts";
 import type { SocketHub, VirtualSocket } from "./socketHub.ts";
-import { applyChanges } from "./tabStorage.ts";
+import { applyChanges, CarriedStorage } from "./tabStorage.ts";
 import {
   draftUri,
+  followedUri,
   parseThreadUri,
   THREAD_VIEW_TYPE,
   threadUri,
-  titleSegment,
   type ThreadResource,
 } from "./uri.ts";
 
@@ -51,16 +51,16 @@ export function openThreadTab(
 /**
  * The `pult.thread` custom editor (`DECISIONS.md`, `thread-tab-editor`): a
  * thread tab's webview runs the thread bundle, whose runtime reaches the
- * server through this host. A tab whose thread's title changed, or whose draft
- * became a thread, is reopened at its new URI with the webview's storage.
+ * server through this host. A visible tab whose thread's title changed, or
+ * whose draft's thread has its generated title, is reopened at its new URI with
+ * the page's storage (`followedUri`); a hidden one, when it is next shown.
  */
 export class ThreadEditorProvider
   implements vscode.CustomReadonlyEditorProvider, vscode.Disposable
 {
   private readonly deps: Dependencies;
   private readonly panels = new Set<ThreadPanel>();
-  /** Storage for a tab about to open at a URI, carried from the tab it replaces. */
-  private readonly seeds = new Map<string, TabStorage>();
+  private readonly carried = new CarriedStorage();
   private readonly subscriptions: Array<vscode.Disposable>;
   private boundEnvironmentId: string | null;
 
@@ -78,7 +78,7 @@ export class ThreadEditorProvider
         for (const panel of this.panels) panel.post({ type: "wakeup" });
       }),
       deps.model.onDidChange(() => {
-        for (const panel of this.panels) if (panel.visible) this.followTitle(panel);
+        for (const panel of this.panels) this.follow(panel, false);
       }),
     ];
   }
@@ -93,20 +93,22 @@ export class ThreadEditorProvider
       webviewPanel.webview.html = `<!doctype html><p>Not a Pult thread: ${escapeHtml(document.uri.toString())}</p>`;
       return;
     }
-    const seed = this.seeds.get(document.uri.toString()) ?? null;
-    this.seeds.delete(document.uri.toString());
+    const seed = this.carried.take(document.uri.toString(), webviewPanel.viewColumn);
     const panel = new ThreadPanel(this, document.uri, resource, webviewPanel, seed);
     this.panels.add(panel);
     webviewPanel.onDidDispose(() => {
       panel.dispose();
       this.panels.delete(panel);
     });
+    let visible = webviewPanel.visible;
     webviewPanel.onDidChangeViewState(() => {
+      const shown = panel.visible && !visible;
+      visible = panel.visible;
       // A hidden tab's page is gone, without closing what it had open.
-      if (panel.visible) this.followTitle(panel);
-      else panel.closeTransport();
+      if (!panel.visible) panel.closeTransport();
+      else if (shown) this.follow(panel, true);
     });
-    this.followTitle(panel);
+    this.follow(panel, true);
   }
 
   /** @internal What a webview's runtime registers, or why the tab cannot show its thread. */
@@ -173,71 +175,78 @@ export class ThreadEditorProvider
     );
   }
 
-  /**
-   * @internal A draft tab's thread exists: the tab moves to the thread's URI,
-   * once the snapshot has the thread, so the tab opens with its title.
-   */
+  /** @internal A draft tab's thread exists: the tab follows it (`followedUri`). */
   promoted(panel: ThreadPanel, threadId: string) {
+    panel.promotedTo = threadId;
+    this.follow(panel, false);
+  }
+
+  /** Reopens a visible tab whose URI no longer names what it shows; `shown` if it just came into view. */
+  private follow(panel: ThreadPanel, shown: boolean) {
+    if (panel.visible && this.destination(panel, shown) !== null) void this.reopen(panel, shown);
+  }
+
+  private destination(panel: ThreadPanel, shown: boolean): vscode.Uri | null {
     const { model } = this.deps;
-    const move = () => {
-      const title = model.thread(threadId)?.title ?? "";
-      void this.reopen(
-        panel,
-        vscode.Uri.from(threadUri(panel.resource.environmentId, threadId, title)),
-      );
-    };
-    if (model.thread(threadId) !== undefined) return move();
-    const subscription = model.onDidChange(() => {
-      if (model.thread(threadId) === undefined) return;
-      subscription.dispose();
-      clearTimeout(timer);
-      move();
+    const uri = followedUri({
+      resource: panel.resource,
+      promotedTo: panel.promotedTo,
+      thread: (threadId) =>
+        panel.resource.environmentId === model.environmentId ? model.thread(threadId) : undefined,
+      shown,
     });
-    // A snapshot that never shows the thread still moves the tab, untitled.
-    const timer = setTimeout(() => {
-      subscription.dispose();
-      move();
-    }, PROMOTION_WAIT_MS);
+    return uri === null ? null : vscode.Uri.from(uri);
   }
 
-  /** Reopens a visible thread tab whose title changed at the URI that names it now. */
-  private followTitle(panel: ThreadPanel) {
-    const { target, environmentId, title } = panel.resource;
-    if (target.kind !== "thread" || environmentId !== this.deps.model.environmentId) return;
-    const thread = this.deps.model.thread(target.threadId);
-    if (thread === undefined || titleSegment(thread.title) === title) return;
-    void this.reopen(panel, vscode.Uri.from(threadUri(environmentId, thread.id, thread.title)));
-  }
-
-  private async reopen(panel: ThreadPanel, uri: vscode.Uri) {
+  private async reopen(panel: ThreadPanel, shown: boolean) {
     if (panel.reopening) return;
     panel.reopening = true;
-    const column = panel.column;
-    const tab = vscode.window.tabGroups.all
-      .find((group) => group.viewColumn === column)
-      ?.tabs.find(
+    try {
+      // The page's last writes, before its storage moves to the new tab.
+      await panel.flush();
+      const uri = this.destination(panel, shown);
+      const tab = this.tabOf(panel);
+      // Opening a tab in a group shows it, so a tab hidden meanwhile waits to be shown.
+      if (uri === null || tab === undefined || !panel.visible) return;
+      const column = tab.group.viewColumn;
+      const drop =
+        panel.storage === null ? () => {} : this.carried.put(uri.toString(), column, panel.storage);
+      try {
+        await vscode.commands.executeCommand("vscode.openWith", uri, THREAD_VIEW_TYPE, {
+          preview: false,
+          preserveFocus: !panel.active,
+          viewColumn: column,
+        });
+      } finally {
+        // The new tab took it, unless one was open at the URI in that group already.
+        drop();
+      }
+      await vscode.window.tabGroups.close(tab, true);
+    } finally {
+      panel.reopening = false;
+    }
+  }
+
+  /** The panel's tab: the one at its URI in its group, or else the only one at its URI. */
+  private tabOf(panel: ThreadPanel): vscode.Tab | undefined {
+    const tabs = vscode.window.tabGroups.all
+      .flatMap((group) => group.tabs)
+      .filter(
         (tab) =>
           tab.input instanceof vscode.TabInputCustom &&
           tab.input.viewType === THREAD_VIEW_TYPE &&
           tab.input.uri.toString() === panel.uri.toString(),
       );
-    // The page's last writes, before its storage moves to the new tab.
-    await panel.flush();
-    if (panel.storage !== null) this.seeds.set(uri.toString(), panel.storage);
-    await vscode.commands.executeCommand("vscode.openWith", uri, THREAD_VIEW_TYPE, {
-      preview: false,
-      preserveFocus: !panel.active,
-      ...(column === undefined ? {} : { viewColumn: column }),
-    });
-    if (tab !== undefined) await vscode.window.tabGroups.close(tab, true);
+    return (
+      tabs.find((tab) => tab.group.viewColumn === panel.column) ??
+      (tabs.length === 1 ? tabs[0] : undefined)
+    );
   }
 
   dispose(): void {
     for (const subscription of this.subscriptions) subscription.dispose();
   }
 }
-
-const PROMOTION_WAIT_MS = 10_000;
 
 // A page that is still loading cannot answer a flush; its writes are all in.
 const FLUSH_WAIT_MS = 1_000;
@@ -251,6 +260,8 @@ class ThreadPanel {
   readonly resource: ThreadResource;
   /** The page's storage as of its last report, carried into a reopened tab. */
   storage: TabStorage | null;
+  /** The thread a draft tab's page went on to show, once its first message created it. */
+  promotedTo: string | null = null;
   reopening = false;
   /** Whether the page is up: it said `ready`, and the tab has not hidden since. */
   private live = false;

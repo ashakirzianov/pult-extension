@@ -7,6 +7,8 @@
 // the tab's label, which VS Code takes from the basename, so a thread whose
 // title changes is reopened at its new URI. A draft names its project in the
 // query, so a restored draft tab knows where to start its thread.
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
+
 import type { ThreadTarget } from "./protocol.ts";
 
 export const THREAD_SCHEME = "pult-thread";
@@ -69,6 +71,40 @@ export function parseThreadUri(uri: UriComponents): ThreadResource | null {
   const [threadId, title] = segments;
   if (!threadId || !title || segments.length !== 2) return null;
   return { environmentId: uri.authority, target: { kind: "thread", threadId }, title };
+}
+
+/** What a tab reads of a thread to know which URI names it. */
+export type TitledThread = Pick<
+  EnvironmentThreadShell,
+  "title" | "titleRegeneration" | "latestRun"
+>;
+
+/**
+ * The URI a tab belongs at, or null where it is right. A thread tab follows
+ * its thread's title. A draft tab whose thread exists (`promotedTo`) waits for
+ * the title the server generates from the first message, so it moves once,
+ * unless the tab was just shown, when its page loads again anyway.
+ */
+export function followedUri(input: {
+  readonly resource: ThreadResource;
+  readonly promotedTo: string | null;
+  readonly thread: (threadId: string) => TitledThread | undefined;
+  readonly shown: boolean;
+}): UriComponents | null {
+  const { resource, promotedTo } = input;
+  const { environmentId, target } = resource;
+  if (target.kind === "thread") {
+    const thread = input.thread(target.threadId);
+    return thread === undefined || titleSegment(thread.title) === resource.title
+      ? null
+      : threadUri(environmentId, target.threadId, thread.title);
+  }
+  if (promotedTo === null) return null;
+  const thread = input.thread(promotedTo);
+  // The first message starts a run and a title generation together.
+  const titled =
+    thread !== undefined && thread.latestRun !== null && thread.titleRegeneration == null;
+  return titled || input.shown ? threadUri(environmentId, promotedTo, thread?.title ?? "") : null;
 }
 
 /** What a tab's decorations and menus key on: the environment and the thread, never the title. */
