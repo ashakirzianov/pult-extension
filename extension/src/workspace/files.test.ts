@@ -37,6 +37,8 @@ class FakeServer implements WorkspaceServer {
   >();
   readonly directories = new Set<string>();
   readonly ignored = new Set<string>();
+  /** Paths that are symlinks, which the server's listing leaves out. */
+  readonly symlinks = new Set<string>();
   readonly writes: Array<{ path: string; expectedVersion: string | undefined }> = [];
   readonly watchers = new Map<string, { listener: WatchListener; disposed: boolean }>();
   private nextVersion = 1;
@@ -72,7 +74,7 @@ class FakeServer implements WorkspaceServer {
       throw failure("ProjectListEntriesError", "directory_list_failed");
     }
     const children = [...this.directories, ...this.files.keys()]
-      .filter((path) => dirname(path) === directory)
+      .filter((path) => dirname(path) === directory && !this.symlinks.has(path))
       .map((path): ProjectEntry => ({
         path: path.slice(cwd.length + 1),
         kind: this.directories.has(path) ? "directory" : "file",
@@ -355,6 +357,20 @@ describe("WorkspaceFiles on a stock server", () => {
     await files.refresh(ROOT);
     server.put(`${ROOT}/src/a.ts`, "export const a = 1;\n");
     expect(vscodeRefusesSave(read, await files.stat(`${ROOT}/src/a.ts`))).toBe(true);
+  });
+
+  it("stats and saves a symlinked file, which the listing leaves out", async () => {
+    const path = `${ROOT}/src/link.ts`;
+    const { server, files } = setup(STOCK, [path]);
+    server.put(path, "linked\n");
+    server.symlinks.add(path);
+
+    expect(await files.stat(path)).toMatchObject({ kind: "file", readonly: false });
+    await files.readFile(path);
+    await files.writeFile(path, text("edited\n"), SAVE);
+
+    expect(server.files.get(path)?.contents).toBe("edited\n");
+    expect((await rejection(files.stat(`${ROOT}/src/gone.ts`))).code).toBe("FileNotFound");
   });
 
   it("cannot read a binary file", async () => {

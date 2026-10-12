@@ -169,7 +169,8 @@ const utf8 = new TextEncoder();
  * server with versions, an open file changed since its contents were served is
  * reported so that this check always refuses (`report`), and a write expects
  * the version served. On a stock server, which has no `statEntry`, a stat is
- * synthesized: the kind from the parent's listing, and the mtime and size
+ * synthesized: the kind from the parent's listing, or from a read where the
+ * listing leaves the path out, as it does a symlink, and the mtime and size
  * counters, bumped on the provider's own writes and when a file's contents
  * are found changed at turn end.
  */
@@ -585,8 +586,27 @@ export class WorkspaceFiles implements Disposable {
     if (folder.relativePath === "") return "directory";
     const entries = await this.list(folder.root, parentOf(folder.relativePath));
     const entry = entries.find((candidate) => candidate.path === folder.relativePath);
-    if (entry === undefined) throw new FilesError("FileNotFound", path);
-    return entry.kind;
+    if (entry !== undefined) return entry.kind;
+    // The listing leaves out symlinks: a read says whether the path is there, and what it is.
+    try {
+      await this.server.readFile({
+        cwd: toHostPath(folder.root),
+        relativePath: folder.relativePath,
+      });
+      return "file";
+    } catch (error) {
+      switch (field(error, "failure")) {
+        case "binary_file":
+          return "file";
+        case "path_not_file":
+          return "directory";
+        // A stock server fails the read of a missing file as an operation.
+        case "path_not_found":
+        case "operation_failed":
+          throw new FilesError("FileNotFound", path);
+      }
+      throw toFilesError(error, path);
+    }
   }
 
   /** A directory's children, sharing one request among concurrent callers, and their ignored marks. */
