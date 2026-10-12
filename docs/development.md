@@ -18,3 +18,5 @@ The pairing link names the web port, whose Vite answers preflights itself. Both 
 ## The headless load
 
 `pnpm test:web` with `PULT_TEST_PAIRING_LINK` set, to a pairing link or `<server>/#token=<token>`, also connects to that server, waits for its projects, and disconnects. A session token from `t3 auth session issue` survives reruns. `PULT_TEST_RECONNECT=1` then also waits, while you restart the server, for the connection to drop and come back.
+
+`PULT_TEST_FOLDER=pult://<environment id>/<path>` also opens that directory as the workspace folder, reads and writes in it, and checks a watched change; the run seeds the directory and changes a file in it on disk, so it must be a scratch directory on this machine, and need not be a project. The environment id is the server's `/.well-known/t3/environment`. `PULT_TEST_STOCK=1` makes the workspace ignore the server's feature flags, as against a stock server.
