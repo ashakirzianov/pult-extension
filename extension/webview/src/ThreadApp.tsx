@@ -32,16 +32,15 @@ import { useNewThreadHandler } from "../t3/src/hooks/useHandleNewThread";
 import { AppAtomRegistryProvider } from "../t3/src/rpc/atomRegistry";
 import { useProjects } from "../t3/src/state/entities";
 import { resolveThreadRouteTarget } from "../t3/src/threadRoutes";
+import { TAB_DRAFT_KEY_PREFIX } from "../../src/threads/protocol.ts";
 import { post } from "./bridge.ts";
 import { session } from "./session.ts";
 import { installTestHooks } from "./testHooks.ts";
 
 // A draft tab's id is the tab's; the draft it holds is the composer store's,
 // minted by upstream's new-thread handler and remembered here.
-const DRAFT_KEY_PREFIX = "pult:draft:";
-
 function heldDraft(tabDraftId: string): DraftId | null {
-  const draftId = localStorage.getItem(DRAFT_KEY_PREFIX + tabDraftId) as DraftId | null;
+  const draftId = localStorage.getItem(TAB_DRAFT_KEY_PREFIX + tabDraftId) as DraftId | null;
   return draftId !== null && useComposerDraftStore.getState().getDraftSession(draftId) !== null
     ? draftId
     : null;
@@ -66,7 +65,7 @@ function followNavigation(router: AnyRouter) {
   const shown = resolveThreadRouteTarget(params);
   if (shown?.kind === "draft") {
     if (tab.kind === "draft") {
-      localStorage.setItem(DRAFT_KEY_PREFIX + tab.draftId, shown.draftId);
+      localStorage.setItem(TAB_DRAFT_KEY_PREFIX + tab.draftId, shown.draftId);
       return;
     }
     const draft = useComposerDraftStore.getState().getDraftSession(shown.draftId);

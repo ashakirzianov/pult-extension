@@ -5,6 +5,7 @@ import type { WindowConnection } from "../connection/service.ts";
 import type { ThreadsModel } from "./model.ts";
 import type {
   HostMessage,
+  StorageChanges,
   TabStorage,
   ThreadTarget,
   Unavailable,
@@ -12,7 +13,7 @@ import type {
   WebviewMessage,
 } from "./protocol.ts";
 import type { SocketHub, VirtualSocket } from "./socketHub.ts";
-import { applyChanges, CarriedStorage } from "./tabStorage.ts";
+import { applyChanges, CarriedStorage, fillShare, shareChanges } from "./tabStorage.ts";
 import {
   draftUri,
   followedUri,
@@ -29,7 +30,11 @@ interface Dependencies {
   readonly connection: WindowConnection;
   readonly hub: SocketHub;
   readonly model: ThreadsModel;
+  readonly workspaceState: vscode.Memento;
 }
+
+// The window's share of the tabs' storage (`tabStorage.ts`), kept across reloads.
+const SHARED_STORAGE_KEY = "pult.threadTabs.sharedStorage";
 
 /** Opens a thread's tab, or a new draft's, in the active group unless told otherwise. */
 export function openThreadTab(
@@ -61,12 +66,14 @@ export class ThreadEditorProvider
   private readonly deps: Dependencies;
   private readonly panels = new Set<ThreadPanel>();
   private readonly carried = new CarriedStorage();
+  private shared: TabStorage;
   private readonly subscriptions: Array<vscode.Disposable>;
   private boundEnvironmentId: string | null;
 
   constructor(deps: Dependencies) {
     this.deps = deps;
     this.boundEnvironmentId = deps.connection.environment?.environmentId ?? null;
+    this.shared = deps.workspaceState.get<TabStorage>(SHARED_STORAGE_KEY, {});
     this.subscriptions = [
       deps.connection.onDidChange(() => {
         const environmentId = this.deps.connection.environment?.environmentId ?? null;
@@ -131,6 +138,27 @@ export class ThreadEditorProvider
       wsBaseUrl: profile.wsBaseUrl,
       bearer,
     };
+  }
+
+  /** @internal What a new tab's page starts from: the window's share, no drafts. */
+  get sharedStorage(): TabStorage {
+    return this.shared;
+  }
+
+  /** @internal A tab's writes, into the window's share. */
+  shareWrites(changes: StorageChanges) {
+    this.setShared(shareChanges(this.shared, changes));
+  }
+
+  /** @internal What the window's share lacks, from the storage a tab saved. */
+  shareSaved(storage: TabStorage) {
+    this.setShared(fillShare(this.shared, storage));
+  }
+
+  private setShared(next: TabStorage) {
+    if (next === this.shared) return;
+    this.shared = next;
+    void this.deps.workspaceState.update(SHARED_STORAGE_KEY, next);
   }
 
   /** @internal */
@@ -380,8 +408,10 @@ class ThreadPanel {
         this.closeTransport();
         this.live = true;
         // The page's own storage, after hiding or a window reload, or else
-        // what the host has: a reopened tab's carried storage.
-        this.storage = message.storage ?? this.storage ?? {};
+        // what the host has: a reopened tab's carried storage, or a new tab's
+        // share of the window's.
+        if (message.storage !== null) this.provider.shareSaved(message.storage);
+        this.storage = message.storage ?? this.storage ?? this.provider.sharedStorage;
         this.post({
           type: "init",
           target: this.resource.target,
@@ -418,6 +448,7 @@ class ThreadPanel {
         return;
       case "storage":
         this.storage = applyChanges(this.storage ?? {}, message.changes);
+        this.provider.shareWrites(message.changes);
         return;
       case "flushed":
         this.flushes.get(message.requestId)?.();

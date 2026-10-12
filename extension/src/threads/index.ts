@@ -29,6 +29,7 @@ export function registerThreads(input: {
     connection,
     hub,
     model,
+    workspaceState: context.workspaceState,
   });
   return {
     editor,

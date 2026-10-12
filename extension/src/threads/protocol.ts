@@ -22,6 +22,9 @@ export interface WebviewEnvironment {
 /** A tab's `localStorage` (`webview/src/storage.ts`), as the host keeps it. */
 export type TabStorage = Readonly<Record<string, string>>;
 
+/** The prefix of the keys that hold the draft a draft tab started (`webview/src/ThreadApp.tsx`), a tab's own. */
+export const TAB_DRAFT_KEY_PREFIX = "pult:draft:";
+
 /** Writes to a tab's storage, oldest first: a key and its value, or null where it was removed. */
 export type StorageChanges = ReadonlyArray<readonly [key: string, value: string | null]>;
 
