@@ -98,22 +98,24 @@ const capabilitiesLayer = Layer.mergeAll(
 
 /**
  * What the vendored connection runtime asks of its host, for a web worker
- * extension host: fetch and the global WebSocket, the worker's network events,
- * window focus as the wakeup, and direct routes only. T3 Connect (an empty relay
- * URL disables the relay client), SSH and a primary local environment are the
- * Pult desktop's.
+ * extension host: fetch and the given WebSocket constructor, the worker's
+ * network events, window focus as the wakeup, and direct routes only. T3
+ * Connect (an empty relay URL disables the relay client), SSH and a primary
+ * local environment are the Pult desktop's.
  */
-export const platformLayer = ManagedRelay.layer({ relayUrl: "", clientId: "t3-web" }).pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(
-      FetchHttpClient.layer,
-      Socket.layerWebSocketConstructorGlobal,
-      connectivityLayer,
-      wakeupsLayer,
-      capabilitiesLayer,
-      Layer.succeed(PlatformConnectionSource.PlatformConnectionSource, {
-        registrations: Stream.empty,
-      }),
+export function platformLayer(webSocketConstructor: Socket.WebSocketConstructor["Service"]) {
+  return ManagedRelay.layer({ relayUrl: "", clientId: "t3-web" }).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        FetchHttpClient.layer,
+        Layer.succeed(Socket.WebSocketConstructor, webSocketConstructor),
+        connectivityLayer,
+        wakeupsLayer,
+        capabilitiesLayer,
+        Layer.succeed(PlatformConnectionSource.PlatformConnectionSource, {
+          registrations: Stream.empty,
+        }),
+      ),
     ),
-  ),
-);
+  );
+}

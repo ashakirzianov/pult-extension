@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The copy's settings (the fork's apps/web/tsconfig.json), which its code is written to.
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "erasableSyntaxOnly": false,
+    "verbatimModuleSyntax": false,
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "paths": {
+      "~/*": ["./t3/src/*"]
+    }
+  },
+  // The copy is checked as far as the entry reaches it, as `pnpm vendor:merge` copies it.
+  "include": ["src", "t3/src/vite-env.d.ts"]
+}

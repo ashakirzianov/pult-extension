@@ -1,0 +1,107 @@
+// The thread bundle, the webview a thread tab loads: `src/main.tsx` mounting
+// the tracked copy of the fork's thread view (`t3/`), built the way the fork
+// builds its web app (the React Compiler, Tailwind), into dist/webview/. The
+// host bundle is esbuild's (package.json); this one is a separate build with no
+// `globalThis.location` define, since a webview is a page with a location.
+import * as NodePath from "node:path";
+
+import babel from "@rolldown/plugin-babel";
+import tailwindcss from "@tailwindcss/vite";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import { defineConfig, type Plugin } from "vite-plus";
+
+import { STUBS } from "./stubs.ts";
+
+const webview = import.meta.dirname;
+const copy = NodePath.join(webview, "t3");
+
+/** Resolves an import of a stubbed upstream module to its replacement (`stubs.ts`). */
+function stubs(): Plugin {
+  const replacements = new Map(
+    Object.entries(STUBS).map(([upstream, ours]) => [
+      NodePath.join(copy, upstream),
+      NodePath.join(webview, ours),
+    ]),
+  );
+  return {
+    name: "pult:stubs",
+    enforce: "pre",
+    async resolveId(source, importer, options) {
+      if (importer === undefined || replacements.has(importer)) return null;
+      const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
+      const replacement = resolved === null ? undefined : replacements.get(resolved.id);
+      return replacement ?? null;
+    },
+  };
+}
+
+/**
+ * A webview's document and its resources are different origins, and a worker
+ * must be same-origin, so `?worker` imports are built inline as blob workers.
+ */
+function inlineWorkers(): Plugin {
+  return {
+    name: "pult:inline-workers",
+    enforce: "pre",
+    resolveId(source, importer, options) {
+      if (!source.endsWith("?worker")) return null;
+      return this.resolve(`${source}&inline`, importer, { ...options, skipSelf: true });
+    },
+  };
+}
+
+// The fork's build-time configuration, all of it off: no T3 Connect, no hosted app.
+const env = {
+  VITE_WS_URL: "",
+  VITE_HTTP_URL: "",
+  VITE_T3CODE_RELAY_URL: "",
+  VITE_CLERK_PUBLISHABLE_KEY: "",
+  VITE_CLERK_JWT_TEMPLATE: "",
+  VITE_CLERK_CLI_OAUTH_CLIENT_ID: "",
+  VITE_RELAY_OTLP_TRACES_URL: "",
+  VITE_RELAY_OTLP_TRACES_DATASET: "",
+  VITE_RELAY_OTLP_TRACES_TOKEN: "",
+  VITE_HOSTED_APP_URL: "",
+  VITE_HOSTED_APP_CHANNEL: "",
+  APP_VERSION: "pult-extension",
+};
+
+export default defineConfig({
+  root: webview,
+  // Assets resolve against the bundle's own URL, which `asWebviewUri` gives.
+  base: "./",
+  assetsInclude: ["**/*.wasm"],
+  plugins: [
+    stubs(),
+    inlineWorkers(),
+    react(),
+    babel({
+      parserOpts: { plugins: ["typescript", "jsx"] },
+      presets: [reactCompilerPreset()],
+    }),
+    tailwindcss(),
+  ],
+  define: Object.fromEntries(
+    Object.entries(env).map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)]),
+  ),
+  resolve: {
+    alias: { "~": NodePath.join(copy, "src") },
+    dedupe: ["react", "react-dom"],
+  },
+  build: {
+    outDir: NodePath.join(webview, "../dist/webview"),
+    emptyOutDir: true,
+    cssCodeSplit: false,
+    rollupOptions: {
+      input: NodePath.join(webview, "src/main.tsx"),
+      output: {
+        entryFileNames: "thread.js",
+        chunkFileNames: "chunks/[name]-[hash].js",
+        assetFileNames: (asset) =>
+          asset.names.some((name) => name.endsWith(".css"))
+            ? "thread.css"
+            : "assets/[name]-[hash][extname]",
+      },
+    },
+  },
+});

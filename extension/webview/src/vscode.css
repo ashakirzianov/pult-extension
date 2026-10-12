@@ -1,0 +1,26 @@
+/* The thread view on VS Code's surfaces: with no T3 theme chosen, its canvas
+   and text follow the editor's, and its sans font the workbench's. Loaded
+   after upstream's stylesheet; the doubled `:root` outranks its dark variant. */
+:root:root:not([data-theme-id]) {
+  --background: var(--vscode-editor-background);
+  --foreground: var(--vscode-editor-foreground);
+  --font-sans: var(--vscode-font-family);
+}
+
+/* VS Code pads a webview's body; the thread view fills the tab, as it fills a window. */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.pult-unavailable {
+  margin: 0;
+  padding: 2rem;
+  font-family: var(--vscode-font-family);
+  color: var(--vscode-descriptionForeground);
+  white-space: pre-wrap;
+}

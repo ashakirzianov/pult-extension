@@ -19,6 +19,7 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as vscode from "vscode";
 
+import type { SocketHub } from "../threads/socketHub.ts";
 import { catalogLayer, type EnvironmentCatalog, type WindowBinding } from "./catalog.ts";
 import { platformLayer } from "./platform.ts";
 import { type BoundEnvironment, presentBoundEnvironment } from "./presentation.ts";
@@ -27,7 +28,8 @@ import { probe, type ProbeInput } from "./probe.ts";
 /**
  * The window's one connection, owned by the extension host: the vendored
  * registry, holding at most the bound environment, whose supervisor reconnects
- * it. Webviews get this state by message, never a connection of their own.
+ * it. Its socket is the hub's, which thread tabs' webviews share; they never
+ * open a connection of their own.
  */
 export class WindowConnection implements vscode.Disposable {
   private readonly runtime;
@@ -36,11 +38,13 @@ export class WindowConnection implements vscode.Disposable {
   private readonly changes = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changes.event;
 
-  constructor(catalog: EnvironmentCatalog, binding: WindowBinding) {
+  constructor(catalog: EnvironmentCatalog, binding: WindowBinding, hub: SocketHub) {
     this.binding = binding;
     this.runtime = ManagedRuntime.make(
       Layer.mergeAll(Connection.layer, ShellSnapshotLoader.layer).pipe(
-        Layer.provideMerge(Layer.mergeAll(platformLayer, catalogLayer(catalog, binding))),
+        Layer.provideMerge(
+          Layer.mergeAll(platformLayer(hub.webSocketConstructor), catalogLayer(catalog, binding)),
+        ),
       ),
     );
     this.runtime.runFork(
@@ -163,10 +167,10 @@ function followBoundEnvironment(publish: (next: BoundEnvironment | null) => void
         Option.match({
           onNone: () => Stream.succeed(null),
           // Every change to the entry, a learned route included, restarts
-          // `followStream` and so this stream, with a fresh shell state: the view
-          // shows "Connecting…" until the snapshot reloads. Learned routes live in
-          // memory (`catalogLayer`), so this repeats after every activation.
-          // `pult/thread-tabs` will need a cache or a steadier source.
+          // `followStream` and so this stream, with a fresh shell state, empty
+          // until the snapshot reloads. Learned routes live in memory
+          // (`catalogLayer`), so this repeats after every activation; the
+          // threads model holds the last snapshot through it (`ThreadsModel`).
           onSome: (environmentId) =>
             registry.followStream(environmentId, watch(registry, environmentId)),
         }),

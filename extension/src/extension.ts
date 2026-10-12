@@ -5,6 +5,7 @@ import { EnvironmentCatalog, WindowBinding } from "./connection/catalog.ts";
 import type { BoundEnvironment } from "./connection/presentation.ts";
 import { WindowConnection } from "./connection/service.ts";
 import { connectionStatusBar } from "./statusBar.ts";
+import { SocketHub } from "./threads/socketHub.ts";
 import { threadsView } from "./threadsView.ts";
 import { bindToFolders, virtualWorkspace } from "./workspace/index.ts";
 
@@ -34,7 +35,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
   // The virtual workspace: an unbound window binds to the environment its `pult:` folders name.
   const unpaired = await bindToFolders(catalog, binding);
 
-  const connection = new WindowConnection(catalog, binding);
+  const hub = new SocketHub();
+  const connection = new WindowConnection(catalog, binding, hub);
   let stock = false;
   // Before the connection, so the folders' watches stop before it does.
   context.subscriptions.push(...virtualWorkspace(connection, binding, unpaired, () => stock));
@@ -43,6 +45,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
   void updateContext();
   context.subscriptions.push(
     connection,
+    hub,
     connectionStatusBar(connection),
     threadsView(connection),
     ...registerCommands(catalog, connection, development),
