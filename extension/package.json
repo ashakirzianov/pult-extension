@@ -123,6 +123,70 @@
         "command": "pult.searchInFiles",
         "title": "Search in Files…",
         "category": "Pult"
+      },
+      {
+        "command": "pult.newThread",
+        "title": "New Thread",
+        "category": "Pult",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pult.newThreadInProject",
+        "title": "New Thread in Project",
+        "category": "Pult"
+      },
+      {
+        "command": "pult.openThread",
+        "title": "Open Thread",
+        "category": "Pult"
+      },
+      {
+        "command": "pult.openThreadToSide",
+        "title": "Open to the Side",
+        "category": "Pult",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "pult.pinThread",
+        "title": "Pin Thread",
+        "category": "Pult",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "pult.unpinThread",
+        "title": "Unpin Thread",
+        "category": "Pult",
+        "icon": "$(pinned)"
+      },
+      {
+        "command": "pult.settleThread",
+        "title": "Settle Thread",
+        "category": "Pult",
+        "icon": "$(pass)"
+      },
+      {
+        "command": "pult.unsettleThread",
+        "title": "Un-settle Thread",
+        "category": "Pult",
+        "icon": "$(circle-large-outline)"
+      },
+      {
+        "command": "pult.snoozeThread",
+        "title": "Snooze Thread…",
+        "category": "Pult",
+        "icon": "$(clock)"
+      },
+      {
+        "command": "pult.unsnoozeThread",
+        "title": "Wake Thread",
+        "category": "Pult",
+        "icon": "$(bell)"
+      },
+      {
+        "command": "pult.copyThreadLink",
+        "title": "Copy Thread Link",
+        "category": "Pult",
+        "icon": "$(link)"
       }
     ],
     "viewsContainers": {
@@ -183,9 +247,58 @@
         {
           "command": "pult.searchInFiles",
           "when": "pult.bound && pult.workspace"
+        },
+        {
+          "command": "pult.newThread",
+          "when": "pult.bound"
+        },
+        {
+          "command": "pult.openThread",
+          "when": "false"
+        },
+        {
+          "command": "pult.openThreadToSide",
+          "when": "false"
+        },
+        {
+          "command": "pult.newThreadInProject",
+          "when": "activeCustomEditorId == pult.thread"
+        },
+        {
+          "command": "pult.pinThread",
+          "when": "activeCustomEditorId == pult.thread && pult.threadPinning"
+        },
+        {
+          "command": "pult.unpinThread",
+          "when": "activeCustomEditorId == pult.thread && pult.threadPinning"
+        },
+        {
+          "command": "pult.settleThread",
+          "when": "activeCustomEditorId == pult.thread && pult.threadSettlement"
+        },
+        {
+          "command": "pult.unsettleThread",
+          "when": "activeCustomEditorId == pult.thread && pult.threadSettlement"
+        },
+        {
+          "command": "pult.snoozeThread",
+          "when": "activeCustomEditorId == pult.thread && pult.threadSnooze"
+        },
+        {
+          "command": "pult.unsnoozeThread",
+          "when": "activeCustomEditorId == pult.thread && pult.threadSnooze"
+        },
+        {
+          "command": "pult.copyThreadLink",
+          "when": "activeCustomEditorId == pult.thread"
         }
       ],
       "view/title": [
+        {
+          "command": "pult.newThread",
+          "when": "view == pult.threads && pult.bound",
+          "group": "navigation@1"
+        },
         {
           "command": "pult.openProject",
           "when": "view == pult.threads && pult.bound",
@@ -200,6 +313,88 @@
           "command": "pult.disconnect",
           "when": "view == pult.threads && pult.bound",
           "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "pult.pinThread",
+          "when": "view == pult.threads && viewItem == thread-active && pult.threadPinning",
+          "group": "inline@1"
+        },
+        {
+          "command": "pult.unpinThread",
+          "when": "view == pult.threads && viewItem == thread-pinned && pult.threadPinning",
+          "group": "inline@1"
+        },
+        {
+          "command": "pult.snoozeThread",
+          "when": "view == pult.threads && viewItem =~ /^thread-(active|pinned)$/ && pult.threadSnooze",
+          "group": "inline@2"
+        },
+        {
+          "command": "pult.unsnoozeThread",
+          "when": "view == pult.threads && viewItem == thread-snoozed && pult.threadSnooze",
+          "group": "inline@2"
+        },
+        {
+          "command": "pult.settleThread",
+          "when": "view == pult.threads && viewItem =~ /^thread-(active|pinned)$/ && pult.threadSettlement",
+          "group": "inline@3"
+        },
+        {
+          "command": "pult.unsettleThread",
+          "when": "view == pult.threads && viewItem == thread-settled && pult.threadSettlement",
+          "group": "inline@3"
+        },
+        {
+          "command": "pult.openThread",
+          "when": "view == pult.threads && viewItem =~ /^thread-/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "pult.openThreadToSide",
+          "when": "view == pult.threads && viewItem =~ /^thread-/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "pult.pinThread",
+          "when": "view == pult.threads && viewItem == thread-active && pult.threadPinning",
+          "group": "2_shelve@1"
+        },
+        {
+          "command": "pult.unpinThread",
+          "when": "view == pult.threads && viewItem == thread-pinned && pult.threadPinning",
+          "group": "2_shelve@1"
+        },
+        {
+          "command": "pult.snoozeThread",
+          "when": "view == pult.threads && viewItem =~ /^thread-(active|pinned)$/ && pult.threadSnooze",
+          "group": "2_shelve@2"
+        },
+        {
+          "command": "pult.unsnoozeThread",
+          "when": "view == pult.threads && viewItem == thread-snoozed && pult.threadSnooze",
+          "group": "2_shelve@2"
+        },
+        {
+          "command": "pult.settleThread",
+          "when": "view == pult.threads && viewItem =~ /^thread-(active|pinned)$/ && pult.threadSettlement",
+          "group": "2_shelve@3"
+        },
+        {
+          "command": "pult.unsettleThread",
+          "when": "view == pult.threads && viewItem == thread-settled && pult.threadSettlement",
+          "group": "2_shelve@3"
+        },
+        {
+          "command": "pult.copyThreadLink",
+          "when": "view == pult.threads && viewItem =~ /^thread-/",
+          "group": "3_copy@1"
+        },
+        {
+          "command": "pult.newThreadInProject",
+          "when": "view == pult.threads && viewItem =~ /^thread-/",
+          "group": "4_new@1"
         }
       ]
     },

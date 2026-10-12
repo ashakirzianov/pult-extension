@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 
 import type { EnvironmentCatalog } from "../connection/catalog.ts";
 import type { WindowConnection } from "../connection/service.ts";
+import { registerThreadCommands } from "./commands.ts";
 import { threadDecorations } from "./decorations.ts";
 import { ThreadEditorProvider } from "./editor.ts";
 import { ProjectFavicons } from "./favicons.ts";
@@ -41,6 +42,7 @@ export function registerThreads(input: {
       }),
       threadPicker({ connection, model, favicons, workspaceState: context.workspaceState }),
       threadDecorations(model),
+      ...registerThreadCommands(connection, model),
     ],
   };
 }

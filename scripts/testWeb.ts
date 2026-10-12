@@ -1,8 +1,10 @@
 // pnpm test:web, the headless load: builds the extension and extension/test/load.ts,
 // then @vscode/test-web runs it in VS Code for the Web, in headless Chromium on port
-// 3917. PULT_TEST_PAIRING_LINK, a pairing link or `<server>/#token=<session token>`,
-// also connects to that server; PULT_TEST_RECONNECT=1 then waits for the connection
-// to drop and come back while you restart the server.
+// 3917, or PULT_TEST_WEB_PORT. PULT_TEST_PAIRING_LINK, a pairing link or
+// `<server>/#token=<session token>`, also connects to that server and opens a thread
+// tab; PULT_TEST_SEND=1 then sends a message from the tab, which runs an agent turn;
+// PULT_TEST_RECONNECT=1 waits for the connection to drop and come back while you
+// restart the server.
 //
 // PULT_TEST_FOLDER, `pult://<environment id>/<path>` naming a scratch directory on the
 // server's machine, which must be this one, also opens it as the workspace folder. The
@@ -38,6 +40,7 @@ run([
   `--define:PULT_TEST_RECONNECT=${String(process.env.PULT_TEST_RECONNECT === "1")}`,
   `--define:PULT_TEST_FOLDER=${JSON.stringify(folder)}`,
   `--define:PULT_TEST_STOCK=${String(process.env.PULT_TEST_STOCK === "1")}`,
+  `--define:PULT_TEST_SEND=${String(process.env.PULT_TEST_SEND === "1")}`,
 ]);
 
 if (folderPath !== undefined) {
@@ -54,7 +57,7 @@ const load = NodeChildProcess.spawn(
     "--browserType=chromium",
     "--headless",
     "--quality=stable",
-    "--port=3917",
+    `--port=${process.env.PULT_TEST_WEB_PORT ?? "3917"}`,
     "--extensionDevelopmentPath=.",
     "--extensionTestsPath=dist/web/test/load.js",
     ...(folder === "" ? [] : [`--folder-uri=${folder}`]),
