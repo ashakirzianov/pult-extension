@@ -10,8 +10,10 @@ The variable is there because a dev server accepts cross-origin HTTP only from t
 
 ## Pairing
 
-- **Desktop VS Code** pairs with the server port (the `[dev-runner]` line's `serverPort`) and a token. The pairing link names the web port, whose Vite answers preflights itself and admits only localhost origins.
-- **VS Code for the Web** runs its extension host at a `v--<hash>.localhost` origin that changes with the browser profile: the web port admits it, and no fixed variable could name it, so the pairing link works as is.
+The pairing link names the web port, whose Vite answers preflights itself. Both clients pair with it as printed:
+
+- **Desktop VS Code**: Vite admits the origins the variable names.
+- **VS Code for the Web** runs its extension host at a `v--<hash>.localhost` origin that changes with the browser profile: Vite admits any localhost origin, and no fixed variable could name it.
 
 ## The headless load
 
