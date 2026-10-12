@@ -1,4 +1,5 @@
 import type { BearerConnectionProfile } from "@t3tools/client-runtime/connection";
+import type { EnvironmentId } from "@t3tools/contracts";
 import type { ResolvedRemotePairingTarget } from "@t3tools/shared/remote";
 import * as vscode from "vscode";
 
@@ -88,14 +89,17 @@ async function reconnect(
     credential ??= await askToken(profile.label);
     if (credential === undefined) return;
     const target = { httpBaseUrl: profile.httpBaseUrl, wsBaseUrl: profile.wsBaseUrl, credential };
-    const outcome = await attach(connection, target, profile);
+    const outcome = await attach(connection, target, profile.environmentId);
     if (outcome !== "auth") return;
     credential = undefined;
   }
 }
 
-/** Adds an environment from a pairing link, or from a server URL and its token. */
-async function add(connection: WindowConnection) {
+/**
+ * Adds an environment from a pairing link, or from a server URL and its token.
+ * Given `expected`, as a workspace whose folders name it, the address must serve it.
+ */
+export async function add(connection: WindowConnection, expected?: EnvironmentId) {
   const value = await vscode.window.showInputBox({
     title: "Add a T3 Code environment",
     prompt: "A pairing link from `t3 pair`, or the server's URL",
@@ -112,11 +116,11 @@ async function add(connection: WindowConnection) {
     case "Invalid":
       return vscode.window.showErrorMessage(input.message);
     case "PairingLink":
-      return attach(connection, input.target);
+      return attach(connection, input.target, expected);
     case "ServerUrl": {
       const token = await askToken(input.host);
       if (token === undefined) return;
-      return attach(connection, input.withToken(token));
+      return attach(connection, input.withToken(token), expected);
     }
   }
 }
@@ -139,7 +143,7 @@ async function connectLink(connection: WindowConnection, pairingLink: string) {
 async function attach(
   connection: WindowConnection,
   target: ResolvedRemotePairingTarget,
-  expected?: BearerConnectionProfile,
+  expected?: EnvironmentId,
 ): Promise<"connected" | ProbeError["kind"]> {
   const host = new URL(target.httpBaseUrl).host;
   try {
@@ -148,7 +152,7 @@ async function attach(
       () =>
         connection.probe({
           target,
-          ...(expected === undefined ? {} : { expectedEnvironmentId: expected.environmentId }),
+          ...(expected === undefined ? {} : { expectedEnvironmentId: expected }),
         }),
     );
     await connection.connect(registration);

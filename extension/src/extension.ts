@@ -6,6 +6,7 @@ import type { BoundEnvironment } from "./connection/presentation.ts";
 import { WindowConnection } from "./connection/service.ts";
 import { connectionStatusBar } from "./statusBar.ts";
 import { threadsView } from "./threadsView.ts";
+import { bindToFolders, virtualWorkspace } from "./workspace/index.ts";
 
 /**
  * What `activate` returns outside production, for the headless load to watch
@@ -15,6 +16,8 @@ import { threadsView } from "./threadsView.ts";
 export interface PultTestApi {
   readonly environment: Omit<BoundEnvironment, "prepared"> | null;
   readonly onDidChange: vscode.Event<void>;
+  /** From now on the workspace treats the server as stock, using none of the fork's features. */
+  readonly simulateStockServer: () => void;
 }
 
 /**
@@ -28,8 +31,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
   const bound = binding.environmentId;
   // Forgotten in another window while this one was closed.
   if (bound !== undefined && catalog.profile(bound) === undefined) await binding.unbind();
+  // The virtual workspace: an unbound window binds to the environment its `pult:` folders name.
+  const unpaired = await bindToFolders(catalog, binding);
 
   const connection = new WindowConnection(catalog, binding);
+  let stock = false;
+  // Before the connection, so the folders' watches stop before it does.
+  context.subscriptions.push(...virtualWorkspace(connection, binding, unpaired, () => stock));
   const updateContext = () =>
     vscode.commands.executeCommand("setContext", "pult.bound", connection.environment !== null);
   void updateContext();
@@ -52,11 +60,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
       }
     }),
   );
-  return development ? testApi(connection) : undefined;
+  return development
+    ? testApi(connection, () => {
+        stock = true;
+      })
+    : undefined;
 }
 
-function testApi(connection: WindowConnection): PultTestApi {
+function testApi(connection: WindowConnection, simulateStockServer: () => void): PultTestApi {
   return {
+    simulateStockServer,
     get environment() {
       if (connection.environment === null) return null;
       const { prepared: _credential, ...environment } = connection.environment;

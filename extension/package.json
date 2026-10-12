@@ -52,6 +52,22 @@
         "command": "pult.forget",
         "title": "Forget Environment",
         "category": "Pult"
+      },
+      {
+        "command": "pult.openProject",
+        "title": "Open Project…",
+        "category": "Pult",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "pult.goToFile",
+        "title": "Go to File…",
+        "category": "Pult"
+      },
+      {
+        "command": "pult.searchInFiles",
+        "title": "Search in Files…",
+        "category": "Pult"
       }
     ],
     "viewsContainers": {
@@ -76,6 +92,11 @@
         "view": "pult.threads",
         "contents": "Pult is not connected to a T3 Code environment.\n[Connect](command:pult.connect)",
         "when": "!pult.bound"
+      },
+      {
+        "view": "workbench.explorer.emptyView",
+        "contents": "Open a project of the connected T3 Code environment as a workspace folder.\n[Open Project](command:pult.openProject)",
+        "when": "pult.bound && workspaceFolderCount == 0"
       }
     ],
     "menus": {
@@ -83,9 +104,26 @@
         {
           "command": "pult.disconnect",
           "when": "pult.bound"
+        },
+        {
+          "command": "pult.openProject",
+          "when": "pult.bound"
+        },
+        {
+          "command": "pult.goToFile",
+          "when": "pult.bound && pult.workspace"
+        },
+        {
+          "command": "pult.searchInFiles",
+          "when": "pult.bound && pult.workspace"
         }
       ],
       "view/title": [
+        {
+          "command": "pult.openProject",
+          "when": "view == pult.threads && pult.bound",
+          "group": "navigation"
+        },
         {
           "command": "pult.connect",
           "when": "view == pult.threads && !pult.bound",
@@ -97,13 +135,46 @@
           "group": "navigation"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "pult.goToFile",
+        "key": "ctrl+p",
+        "mac": "cmd+p",
+        "when": "virtualWorkspace == pult"
+      },
+      {
+        "command": "pult.searchInFiles",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "virtualWorkspace == pult"
+      }
+    ],
+    "colors": [
+      {
+        "id": "pult.ignoredResourceForeground",
+        "description": "Color of an entry the environment's Git ignores, in a `pult:` workspace folder.",
+        "defaults": {
+          "dark": "#8C8C8C",
+          "light": "#8E8E90",
+          "highContrast": "#A7A8A9",
+          "highContrastLight": "#8E8E90"
+        }
+      }
+    ]
   },
   "activationEvents": [
+    "onFileSystem:pult",
     "onStartupFinished"
   ],
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.110.0"
+  },
+  "capabilities": {
+    "virtualWorkspaces": true,
+    "untrustedWorkspaces": {
+      "supported": true
+    }
   }
 }

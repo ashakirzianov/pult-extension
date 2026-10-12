@@ -95,8 +95,10 @@ export class EnvironmentCatalog {
  * state, and a workspace memento exists even in an empty window. A binding per
  * window is "one window per environment" in a form the code can check; a global
  * binding would give every window the same environment, and the workspace
- * folders alone cannot name one, since an empty window has none. Anton's
- * ruling.
+ * folders alone cannot name one, since an empty window has none. The folders
+ * of the virtual workspace must match the binding: an unbound window binds to
+ * the environment its `pult:` folders name, and a bound one refuses another
+ * environment's (`workspace/binding.ts`). Anton's ruling.
  */
 export class WindowBinding {
   private readonly workspaceState: Memento;
