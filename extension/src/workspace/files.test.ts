@@ -9,6 +9,7 @@ import {
   type Change,
   type Features,
   FilesError,
+  type Stat,
   type WatchListener,
   WorkspaceFiles,
   type WorkspaceServer,
@@ -30,7 +31,7 @@ const READ_LIMIT = 64;
 
 /** A host filesystem behind the project RPCs, with the server's failures as tagged errors. */
 class FakeServer implements WorkspaceServer {
-  readonly files = new Map<string, { contents: string; version: number }>();
+  readonly files = new Map<string, { contents: string; byteLength: number; version: number }>();
   readonly directories = new Set<string>();
   readonly ignored = new Set<string>();
   readonly writes: Array<{ path: string; expectedVersion: string | undefined }> = [];
@@ -44,10 +45,16 @@ class FakeServer implements WorkspaceServer {
 
   /** The host, or an agent, changing a file behind the client's back. */
   put(path: string, contents: string) {
+    this.putBytes(path, new TextEncoder().encode(contents));
+  }
+
+  /** A file the server reads as its readFile does: UTF-8, leniently, dropping a BOM. */
+  putBytes(path: string, bytes: Uint8Array) {
     for (let parent = dirname(path); parent !== "/"; parent = dirname(parent)) {
       this.directories.add(parent);
     }
-    this.files.set(path, { contents, version: this.nextVersion++ });
+    const contents = new TextDecoder("utf-8").decode(bytes);
+    this.files.set(path, { contents, byteLength: bytes.length, version: this.nextVersion++ });
   }
 
   features = async () => this.enabled;
@@ -72,11 +79,11 @@ class FakeServer implements WorkspaceServer {
     const file = this.files.get(path);
     if (file === undefined) throw failure("ProjectReadFileError", "path_not_found");
     if (file.contents.includes("\0")) throw failure("ProjectReadFileError", "binary_file");
-    const truncated = file.contents.length > READ_LIMIT;
+    const truncated = file.byteLength > READ_LIMIT;
     return {
       relativePath,
       contents: file.contents.slice(0, READ_LIMIT),
-      byteLength: file.contents.length,
+      byteLength: file.byteLength,
       truncated,
       ...(this.enabled.fileVersions && !truncated ? { version: `v${file.version}` } : {}),
     };
@@ -92,7 +99,7 @@ class FakeServer implements WorkspaceServer {
       relativePath,
       kind: file === undefined ? ("directory" as const) : ("file" as const),
       symlink: false,
-      size: file?.contents.length ?? 0,
+      size: file?.byteLength ?? 0,
       mtimeMs: file?.version ?? 0,
       birthtimeMs: 0,
       version: `v${file?.version ?? 0}`,
@@ -194,7 +201,7 @@ function setup(enabled: Features, open: Array<string> = []) {
   server.put(`${ROOT}/src/a.ts`, "export const a = 1;\n");
   const changes: Array<Change> = [];
   const decorated: Array<string> = [];
-  const truncated: Array<string> = [];
+  const readOnly: Array<[string, string]> = [];
   const files = new WorkspaceFiles(
     server,
     {
@@ -203,16 +210,24 @@ function setup(enabled: Features, open: Array<string> = []) {
       openPaths: () => open,
       changed: (list) => void changes.push(...list),
       decorated: (paths) => void decorated.push(...paths),
-      truncated: (path) => void truncated.push(path),
+      openedReadOnly: (path, reason) => void readOnly.push([path, reason]),
     },
     1_000,
   );
-  return { server, files, changes, decorated, truncated };
+  return { server, files, changes, decorated, readOnly };
 }
 
 const text = (value: string) => new TextEncoder().encode(value);
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 const SAVE = { create: true, overwrite: true };
+
+/**
+ * VS Code's own guard on a save: it refuses, offering Compare and Overwrite,
+ * when the file stats newer than when the editor read it and at another size.
+ */
+function vscodeRefusesSave(read: Stat, now: Stat) {
+  return read.mtime < now.mtime && read.size !== now.size;
+}
 
 async function rejection(promise: Promise<unknown>): Promise<FilesError> {
   const error = await promise.then(
@@ -303,6 +318,31 @@ describe("WorkspaceFiles on a stock server", () => {
     expect(changes).toEqual([{ path: `${ROOT}/src/a.ts`, kind: "deleted" }]);
   });
 
+  it("has VS Code refuse a stale save after a turn end, but not after its own write", async () => {
+    const { server, files } = setup(STOCK, [`${ROOT}/src/a.ts`]);
+    const read = await files.stat(`${ROOT}/src/a.ts`);
+    await files.readFile(`${ROOT}/src/a.ts`);
+    await files.writeFile(`${ROOT}/src/a.ts`, text("export const a = 2;\n"), SAVE);
+    const written = await files.stat(`${ROOT}/src/a.ts`);
+    expect(vscodeRefusesSave(read, written)).toBe(true);
+    expect(vscodeRefusesSave(written, await files.stat(`${ROOT}/src/a.ts`))).toBe(false);
+
+    // An agent changes the file, same size, while the editor is dirty.
+    server.put(`${ROOT}/src/a.ts`, "export const a = 9;\n");
+    await files.refresh(ROOT);
+    expect(vscodeRefusesSave(written, await files.stat(`${ROOT}/src/a.ts`))).toBe(true);
+  });
+
+  it("never stats a file deleted and made again as it was before", async () => {
+    const { server, files } = setup(STOCK, [`${ROOT}/src/a.ts`]);
+    await files.readFile(`${ROOT}/src/a.ts`);
+    const read = await files.stat(`${ROOT}/src/a.ts`);
+    server.files.delete(`${ROOT}/src/a.ts`);
+    await files.refresh(ROOT);
+    server.put(`${ROOT}/src/a.ts`, "export const a = 1;\n");
+    expect(vscodeRefusesSave(read, await files.stat(`${ROOT}/src/a.ts`))).toBe(true);
+  });
+
   it("cannot read a binary file", async () => {
     const { server, files } = setup(STOCK);
     server.put(`${ROOT}/logo.png`, "\0PNG");
@@ -334,11 +374,11 @@ describe("WorkspaceFiles on either server", () => {
 
     it(`opens a truncated file read-only and never writes it back (${name})`, async () => {
       vi.useFakeTimers();
-      const { server, files, changes, truncated } = setup(enabled, [`${ROOT}/big.txt`]);
+      const { server, files, changes, readOnly } = setup(enabled, [`${ROOT}/big.txt`]);
       server.put(`${ROOT}/big.txt`, "x".repeat(READ_LIMIT * 2));
 
       expect((await files.readFile(`${ROOT}/big.txt`)).length).toBe(READ_LIMIT);
-      expect(truncated).toEqual([`${ROOT}/big.txt`]);
+      expect(readOnly).toEqual([[`${ROOT}/big.txt`, "truncated"]]);
       vi.runAllTimers();
       // The open editor re-stats, and the stat says read-only.
       expect(changes).toEqual([{ path: `${ROOT}/big.txt`, kind: "changed" }]);
@@ -351,7 +391,59 @@ describe("WorkspaceFiles on either server", () => {
   }
 });
 
+describe("WorkspaceFiles on either server, a file the server cannot read back exactly", () => {
+  for (const [name, enabled] of [
+    ["stock", STOCK],
+    ["capable", CAPABLE],
+  ] as const) {
+    it(`opens Latin-1 and BOM files read-only and never writes them back (${name})`, async () => {
+      const { server, files, readOnly } = setup(enabled);
+      server.putBytes(`${ROOT}/latin1.txt`, new Uint8Array([0x63, 0x61, 0x66, 0xe9]));
+      server.putBytes(`${ROOT}/bom.txt`, new Uint8Array([0xef, 0xbb, 0xbf, 0x61]));
+
+      for (const path of [`${ROOT}/latin1.txt`, `${ROOT}/bom.txt`]) {
+        await files.readFile(path);
+        expect((await files.stat(path)).readonly).toBe(true);
+        expect((await rejection(files.writeFile(path, text("a"), SAVE))).code).toBe(
+          "NoPermissions",
+        );
+      }
+      expect(readOnly).toEqual([
+        [`${ROOT}/latin1.txt`, "lossy"],
+        [`${ROOT}/bom.txt`, "lossy"],
+      ]);
+      expect(server.writes).toEqual([]);
+    });
+  }
+});
+
 describe("WorkspaceFiles on a server with the fork's features", () => {
+  it("has VS Code refuse a save over a same-size change, and lets its Overwrite through", async () => {
+    const { server, files } = setup(CAPABLE, [`${ROOT}/src/a.ts`]);
+    const read = await files.stat(`${ROOT}/src/a.ts`);
+    await files.readFile(`${ROOT}/src/a.ts`);
+    server.put(`${ROOT}/src/a.ts`, "export const a = 9;\n");
+
+    // VS Code stats before it writes; the size it sees differs, so it refuses.
+    expect(vscodeRefusesSave(read, await files.stat(`${ROOT}/src/a.ts`))).toBe(true);
+    // Overwrite: VS Code stats again and writes over the agent's version.
+    await files.stat(`${ROOT}/src/a.ts`);
+    await files.writeFile(`${ROOT}/src/a.ts`, text("export const a = 2;\n"), SAVE);
+    expect(server.files.get(`${ROOT}/src/a.ts`)?.contents).toBe("export const a = 2;\n");
+  });
+
+  it("fails a save over a change made after VS Code's last stat", async () => {
+    const { server, files } = setup(CAPABLE, [`${ROOT}/src/a.ts`]);
+    await files.readFile(`${ROOT}/src/a.ts`);
+    await files.stat(`${ROOT}/src/a.ts`);
+    server.put(`${ROOT}/src/a.ts`, "export const a = 'agent';\n");
+    const error = await rejection(
+      files.writeFile(`${ROOT}/src/a.ts`, text("export const a = 'user';\n"), SAVE),
+    );
+    expect(error.message).toMatch(/changed on the host since Pult read it/);
+    expect(server.files.get(`${ROOT}/src/a.ts`)?.contents).toBe("export const a = 'agent';\n");
+  });
+
   it("round-trips an edit under the version it read, then the one it wrote", async () => {
     const { server, files } = setup(CAPABLE);
     const version = () => `v${server.files.get(`${ROOT}/src/a.ts`)?.version}`;

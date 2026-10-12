@@ -122,6 +122,9 @@ export class FilesError extends Error {
   }
 }
 
+/** Why a file opened read-only: only part of it was read, or its bytes did not survive the server's UTF-8 decoding. */
+export type ReadOnlyReason = "truncated" | "lossy";
+
 export interface Stat {
   readonly kind: ProjectStatEntryResult["kind"];
   readonly symlink: boolean;
@@ -147,8 +150,8 @@ export interface WorkspaceFilesHost {
   readonly changed: (changes: ReadonlyArray<Change>) => void;
   /** Paths whose ignored or gone mark changed. */
   readonly decorated: (paths: ReadonlyArray<string>) => void;
-  /** A read came back truncated, once per path: the file opens read-only. */
-  readonly truncated: (path: string, byteLength: number) => void;
+  /** A read cannot be written back, once per path and reason: the file opens read-only. */
+  readonly openedReadOnly: (path: string, reason: ReadOnlyReason, byteLength: number) => void;
 }
 
 const MUTATIONS_UNSUPPORTED =
@@ -161,22 +164,31 @@ const utf8 = new TextEncoder();
  * The workspace folders' files over the server's project RPCs: the logic of
  * the `pult:` file system provider, without VS Code's types.
  *
- * On a stock server, which has no `statEntry`, a stat is synthesized: the kind
- * from the parent's listing and the mtime a counter, bumped on the provider's
- * own writes and when a file's contents are found changed at turn end, so VS
- * Code's own modified-since check still sees those changes.
+ * VS Code refuses to save over a file whose stat is newer and of another size
+ * than when it was read. A file changed since the provider served its contents
+ * therefore always stats at a size other than the one served. On a stock
+ * server, which has no `statEntry`, a stat is synthesized: the kind from the
+ * parent's listing, and the mtime and size counters, bumped on the provider's
+ * own writes and when a file's contents are found changed at turn end.
  */
 export class WorkspaceFiles implements Disposable {
   private readonly server: WorkspaceServer;
   private readonly host: WorkspaceFilesHost;
   private readonly epoch: number;
   private clock: number;
-  /** The version each file was last read, stat'd or written at, for writeFile's `expectedVersion`. */
+  /**
+   * The version each file was last read, stat'd or written at, for writeFile's
+   * `expectedVersion`. A stat counts, so VS Code's Overwrite can follow its
+   * modified-since refusal; the version then guards the gap between VS Code's
+   * stat and the write.
+   */
   private readonly versions = new Map<string, string>();
+  /** The version and size of the contents last served or written, to tell a file changed since. */
+  private readonly served = new Map<string, { readonly version: string; readonly size: number }>();
   /** Each file's contents as last read or written, digested, to tell a changed file on a stock server. */
   private readonly digests = new Map<string, string>();
   private readonly mtimes = new Map<string, number>();
-  private readonly truncatedPaths = new Set<string>();
+  private readonly readOnly = new Map<string, ReadOnlyReason>();
   private readonly ignored = new Set<string>();
   private readonly goneRoots = new Set<string>();
   private readonly watches = new Map<string, Disposable>();
@@ -192,30 +204,35 @@ export class WorkspaceFiles implements Disposable {
   async stat(path: string): Promise<Stat> {
     const target = this.target(path);
     const features = await this.server.features();
-    const readonly = target.folder === undefined || this.truncatedPaths.has(path);
-    // A truncated file reads 1 ms newer, so its open editor re-reads it and turns read-only.
-    const nudge = this.truncatedPaths.has(path) ? 1 : 0;
+    const readonly = target.folder === undefined || this.readOnly.has(path);
+    // A file that turned read-only reads 1 ms newer, so its open editor re-reads it and takes that.
+    const nudge = this.readOnly.has(path) ? 1 : 0;
     if (features.fileVersions) {
       const entry = await this.server
         .statEntry({ cwd: target.cwd, relativePath: target.relativePath })
         .catch(failed(path));
       if (entry.kind === "file") this.versions.set(path, entry.version);
+      const served = this.served.get(path);
+      const changed =
+        served !== undefined &&
+        served.version !== entry.version &&
+        this.host.openPaths().includes(path);
       return {
         kind: entry.kind,
         symlink: entry.symlink,
         ctime: entry.birthtimeMs,
         mtime: entry.mtimeMs + nudge,
-        size: entry.size,
+        size: changed && entry.size === served.size ? entry.size + 1 : entry.size,
         readonly,
       };
     }
+    const mtime = this.mtimes.get(path) ?? this.epoch;
     return {
       kind: await this.listedKind(path, target.folder),
       symlink: false,
       ctime: this.epoch,
-      mtime: (this.mtimes.get(path) ?? this.epoch) + nudge,
-      // Constant, so VS Code's etag moves only with the synthesized mtime.
-      size: 0,
+      mtime: mtime + nudge,
+      size: mtime - this.epoch,
       readonly,
     };
   }
@@ -240,21 +257,32 @@ export class WorkspaceFiles implements Disposable {
       if (field(error, "failure") !== "binary_file") throw toFilesError(error, path);
       return this.readBinary(path, target);
     }
-    if (result.truncated !== this.truncatedPaths.has(path)) {
-      if (result.truncated) {
-        this.truncatedPaths.add(path);
-        this.host.truncated(path, result.byteLength);
-      } else {
-        this.truncatedPaths.delete(path);
+    const bytes = utf8.encode(result.contents);
+    // The server decodes leniently: an invalid byte reads as U+FFFD and a BOM is dropped.
+    const reason: ReadOnlyReason | undefined = result.truncated
+      ? "truncated"
+      : bytes.length !== result.byteLength || result.contents.includes("\uFFFD")
+        ? "lossy"
+        : undefined;
+    if (reason !== this.readOnly.get(path)) {
+      if (reason === undefined) this.readOnly.delete(path);
+      else {
+        this.readOnly.set(path, reason);
+        this.host.openedReadOnly(path, reason, result.byteLength);
       }
       // After this read is answered: the open editor re-stats and takes the new read-only state.
       setTimeout(() => this.host.changed([{ path, kind: "changed" }]), 0);
     }
     // A truncated read has no version, so it can never be written back as the whole file.
-    if (result.version === undefined) this.versions.delete(path);
-    else this.versions.set(path, result.version);
+    if (result.version === undefined) {
+      this.versions.delete(path);
+      this.served.delete(path);
+    } else {
+      this.versions.set(path, result.version);
+      this.served.set(path, { version: result.version, size: result.byteLength });
+    }
     this.digests.set(path, digest(result.contents));
-    return utf8.encode(result.contents);
+    return bytes;
   }
 
   async writeFile(
@@ -263,12 +291,8 @@ export class WorkspaceFiles implements Disposable {
     options: { readonly create: boolean; readonly overwrite: boolean },
   ): Promise<void> {
     const folder = this.writable(path);
-    if (this.truncatedPaths.has(path)) {
-      throw new FilesError(
-        "NoPermissions",
-        `${baseName(path)} is larger than the server reads, so Pult opened only its start and will not write it back.`,
-      );
-    }
+    const reason = this.readOnly.get(path);
+    if (reason !== undefined) throw new FilesError("NoPermissions", readOnlyMessage(path, reason));
     let contents: string;
     try {
       contents = strictUtf8.decode(content);
@@ -279,6 +303,8 @@ export class WorkspaceFiles implements Disposable {
       );
     }
     const features = await this.server.features();
+    // Taken before the existence check, whose stat would refresh it.
+    const expectedVersion = features.fileVersions ? this.versions.get(path) : undefined;
     const exists =
       !features.entryMutations || !options.create || !options.overwrite
         ? await this.exists(path)
@@ -288,7 +314,6 @@ export class WorkspaceFiles implements Disposable {
     if (exists === false && !features.entryMutations) {
       throw new FilesError("NoPermissions", MUTATIONS_UNSUPPORTED);
     }
-    const expectedVersion = features.fileVersions ? this.versions.get(path) : undefined;
     const result = await this.server
       .writeFile({
         cwd: toHostPath(folder.root),
@@ -299,6 +324,7 @@ export class WorkspaceFiles implements Disposable {
       .catch(failed(path));
     if (features.fileVersions && result.version !== undefined) {
       this.versions.set(path, result.version);
+      this.served.set(path, { version: result.version, size: content.length });
     }
     this.digests.set(path, digest(contents));
     this.bump(path);
@@ -565,15 +591,26 @@ export class WorkspaceFiles implements Disposable {
     this.mtimes.set(path, this.clock);
   }
 
-  /** Drops what is known of `path` and everything under it. */
+  /**
+   * Drops what is known of `path` and everything under it. Their synthesized
+   * mtimes move on rather than back, so a file deleted and made again never
+   * stats as it did before.
+   */
   private forget(path: string): void {
-    for (const known of [this.versions, this.digests, this.mtimes]) {
+    for (const known of [this.versions, this.served, this.digests, this.readOnly]) {
       for (const key of known.keys()) if (relativeTo(path, key) !== undefined) known.delete(key);
     }
-    for (const key of this.truncatedPaths) {
-      if (relativeTo(path, key) !== undefined) this.truncatedPaths.delete(key);
+    for (const key of this.mtimes.keys()) {
+      if (key !== path && relativeTo(path, key) !== undefined) this.bump(key);
     }
+    this.bump(path);
   }
+}
+
+function readOnlyMessage(path: string, reason: ReadOnlyReason): string {
+  return reason === "truncated"
+    ? `${baseName(path)} is larger than the server reads, so Pult opened only its start and will not write it back.`
+    : `${baseName(path)} is not plain UTF-8 (a byte-order mark, or another encoding), and the server reads it as text, so Pult will not write it back.`;
 }
 
 /** A rejection handler that rethrows the server's error as the `FilesError` for `path`. */

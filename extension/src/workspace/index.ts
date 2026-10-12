@@ -60,9 +60,11 @@ export function virtualWorkspace(
         list.map((change) => ({ type: CHANGE_TYPES[change.kind], uri: uri(change.path) })),
       ),
     decorated: (paths) => decorations.fire(paths.map(uri)),
-    truncated: (path, byteLength) =>
+    openedReadOnly: (path, reason, byteLength) =>
       void vscode.window.showWarningMessage(
-        `Pult: ${baseName(path)} is ${(byteLength / 2 ** 20).toFixed(1)} MiB, more than the server reads, so it opened truncated and read-only.`,
+        reason === "truncated"
+          ? `Pult: ${baseName(path)} is ${(byteLength / 2 ** 20).toFixed(1)} MiB, more than the server reads, so it opened truncated and read-only.`
+          : `Pult: ${baseName(path)} is not plain UTF-8, which the server reads only as text, so it opened read-only.`,
       ),
   });
   const provider = new PultFileSystemProvider(files, changes.event, () => {
