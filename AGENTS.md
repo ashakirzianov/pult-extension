@@ -7,7 +7,7 @@ label: repo:pult-extension
 
 This repo is **Pult's VS Code extension**, step 1 of RFC 1, and a repo of the **Pult track** (xaxis `pult/about`). The extension attaches to a running T3 Code server over its WebSocket and HTTP protocol, typed by the vendored packages, and ships as a VSIX. The server is not here: a server-side need goes to the fork (`pult/decisions`, `server-side-home`). The track's RFCs, design principles and decisions live in xaxis under `pult/`. Cross-track conventions live in `../axis/AGENTS.md`.
 
-- Read `../pult/docs/pult/rfc-0.md` (human-written, never edited by agents) before anything else, then `../pult/docs/pult/rfc-1.md`, the current direction.
+- Read xaxis `pult/rfc-0` (human-written, never edited by agents) before anything else, then `pult/rfc-1`, the current direction.
 - The track's decisions are xaxis `pult/decisions`: one log for its three repos, grouped by area, this repo's under `pult-extension: Repository` and Extension. Record a new one there, in the entry shape of `../axis/workflow/global-agents.md`.
 - Commits are small and semantically scoped, one logical unit each, with conventional titles. `origin` is `github.com/ashakirzianov/pult-extension`.
 - Licence: upstream's MIT text stays.
@@ -73,12 +73,11 @@ The most common defect is a change that works on the path you tested and is miss
 Most code changes do not need a documentation change.
 
 - `docs/` holds what is useless without the checkout. Designs, direction and decisions live in xaxis under `pult/`, since someone without the repo uses them too. Before adding a paragraph, ask what a maintainer would get wrong without it.
-- An effort's plan may sit beside its design as `docs/<effort>-tasks.md` while the effort runs; when the effort ends, both move to `archive/`. Do not commit research notes or agent scratch files.
+- An effort's design and plan live on its xaxis issue, not here. Do not commit research notes or agent scratch files.
 
-## Taste
+## Code conventions
 
-- Complexity belongs at the boundary. UI stays dumb; what the server can do deterministically, do not ask an agent to do.
+The track's design principles are xaxis `pult/taste`. In this repo's code:
+
 - Inferred types over annotations. `any` is the enemy. Follow Effect's patterns where the vendored code uses it.
 - Comments describe how a thing is used, and move when the code moves.
-- No continuously repainting animations. Users notice a dropped frame, a lying spinner and a stale label.
-- Do not preserve complexity because it already exists, and do not add machinery because it looks architecturally impressive. Fight scope creep. If a rule here fights the task, say so and get a human sign-off before breaking it.
