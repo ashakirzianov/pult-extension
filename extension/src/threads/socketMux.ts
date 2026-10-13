@@ -1,4 +1,4 @@
-// Webview clients on the host's one socket (`DECISIONS.md`, `connection-owner`).
+// Webview clients on the host's one socket (`pult/decisions`, `connection-owner`).
 // The socket speaks Effect RPC in JSON, one message or an array of them per
 // frame. A client's messages go upstream with their request ids rewritten into
 // a namespace of the client's own, a string the host's runtime, whose ids are

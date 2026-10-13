@@ -47,7 +47,7 @@ export function threadTabUri(environmentId: string, thread: EnvironmentThreadShe
 }
 
 /**
- * `pult.threads`, modelled on upstream's sidebar (`DECISIONS.md`,
+ * `pult.threads`, modelled on upstream's sidebar (`pult/decisions`,
  * `thread-picker`): the Pinned shelf, open until folded, then active threads,
  * then the Snoozed and Settled shelves, folded until opened, each remembered
  * per window. A row's icon is its project's, its badge its status, its

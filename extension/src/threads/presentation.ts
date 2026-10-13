@@ -18,7 +18,7 @@ import {
 import { parseThreadUri, type UriComponents } from "./uri.ts";
 
 /**
- * The thread features a server advertises (`DECISIONS.md`, `capability-gated-rpcs`).
+ * The thread features a server advertises (`pult/decisions`, `capability-gated-rpcs`).
  * Without settlement or snooze, as on a stock server, no thread sits on those
  * shelves and their commands are hidden, as upstream's sidebar does.
  */

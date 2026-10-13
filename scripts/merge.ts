@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The tracked copy of the fork's thread view (`DECISIONS.md`, `thread-view-source`):
+// The tracked copy of the fork's thread view (`pult/decisions`, `thread-view-source`):
 // extension/webview/t3/ holds the files of the fork's apps/web that the thread
 // bundle's entry (extension/webview/src/) reaches, at the commit recorded in
 // extension/webview/t3/UPSTREAM. Unlike vendor/, the copy takes small edits

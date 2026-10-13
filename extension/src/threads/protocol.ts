@@ -1,6 +1,6 @@
 // The messages between the extension host and a thread tab's webview, shared by
 // both bundles. The webview's runtime reaches the server only through the host
-// (`DECISIONS.md`, `connection-owner`): its sockets are virtual ones the host
+// (`pult/decisions`, `connection-owner`): its sockets are virtual ones the host
 // multiplexes onto its own (`socketMux.ts`), and its HTTP to the environment is
 // a fetch the host performs.
 

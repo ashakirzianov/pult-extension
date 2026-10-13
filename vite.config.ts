@@ -18,8 +18,6 @@ export default defineConfig({
       "vendor/t3code/packages/**",
       "vendor/t3code/patches/**",
       "extension/webview/t3/**",
-      // The decision log has a fixed entry shape, which formatting rewrites.
-      "DECISIONS.md",
       "dist",
       "release",
       "node_modules",

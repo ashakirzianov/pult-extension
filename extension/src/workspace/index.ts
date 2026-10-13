@@ -22,7 +22,7 @@ const CHANGE_TYPES: Record<Change["kind"], vscode.FileChangeType> = {
 
 /**
  * The virtual workspace: the bound environment's projects and worktrees as
- * `pult:` workspace folders (`DECISIONS.md`, `pult-uri`), its commands, and
+ * `pult:` workspace folders (`pult/decisions`, `pult-uri`), its commands, and
  * what keeps open files current: the folders' watches where the server has
  * them, turn ends and reconnects everywhere. `unpaired` is the environment the
  * folders name when the catalog lacks it (`bindToFolders`); `stock`, for the

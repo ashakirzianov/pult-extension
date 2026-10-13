@@ -34,7 +34,7 @@ import {
 
 /**
  * The server features the workspace uses only where the server config
- * advertises them; each has a stock behaviour (`DECISIONS.md`,
+ * advertises them; each has a stock behaviour (`pult/decisions`,
  * `capability-gated-rpcs`).
  */
 export interface Features {

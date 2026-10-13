@@ -1,4 +1,4 @@
-// A thread tab's resource (`DECISIONS.md`, `thread-tab-editor`):
+// A thread tab's resource (`pult/decisions`, `thread-tab-editor`):
 //
 //   pult-thread://<environment>/<threadId>/<title>
 //   pult-thread://<environment>/draft/<draftId>/New Thread?project=<projectId>

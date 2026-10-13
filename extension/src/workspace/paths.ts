@@ -1,7 +1,7 @@
 /**
  * Paths of `pult:` URIs. A URI's authority is the environment id and its path
  * the host's absolute path with forward slashes: `/Users/anton/x.ts` as is, a
- * Windows `C:\Users\x.ts` as `/c:/Users/x.ts` (`DECISIONS.md`, `pult-uri`).
+ * Windows `C:\Users\x.ts` as `/c:/Users/x.ts` (`pult/decisions`, `pult-uri`).
  * Workspace folders are project and worktree roots, held as URI paths.
  */
 export const PULT_SCHEME = "pult";

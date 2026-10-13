@@ -5,16 +5,16 @@ label: repo:pult-extension
 
 # Pult extension
 
-This repo is **Pult's VS Code extension**, step 1 of RFC 1, and a repo of the **Pult track** (xaxis `pult/about`). The extension attaches to a running T3 Code server over its WebSocket and HTTP protocol, typed by the vendored packages, and ships as a VSIX. The server is not here: a server-side need goes to the fork (`../pult/DECISIONS.md`, `server-side-home`). The track's RFCs and decisions live in the Pult repo (`../pult`), beside the web and desktop clients. Cross-track conventions live in `../axis/AGENTS.md`.
+This repo is **Pult's VS Code extension**, step 1 of RFC 1, and a repo of the **Pult track** (xaxis `pult/about`). The extension attaches to a running T3 Code server over its WebSocket and HTTP protocol, typed by the vendored packages, and ships as a VSIX. The server is not here: a server-side need goes to the fork (`pult/decisions`, `server-side-home`). The track's RFCs, design principles and decisions live in xaxis under `pult/`. Cross-track conventions live in `../axis/AGENTS.md`.
 
 - Read `../pult/docs/pult/rfc-0.md` (human-written, never edited by agents) before anything else, then `../pult/docs/pult/rfc-1.md`, the current direction.
-- `DECISIONS.md` holds this repo's rulings and `../pult/DECISIONS.md` the track's.
+- The track's decisions are xaxis `pult/decisions`: one log for its three repos, grouped by area, this repo's under `pult-extension: Repository` and Extension. Record a new one there, in the entry shape of `../axis/workflow/global-agents.md`.
 - Commits are small and semantically scoped, one logical unit each, with conventional titles. `origin` is `github.com/ashakirzianov/pult-extension`.
 - Licence: upstream's MIT text stays.
 
 ## Review posture
 
-**High-level.** Anton reviews direction, interfaces and module boundaries (the RFCs, `DECISIONS.md`, the seams with the server and the vendored packages), not implementation. Agents commit on their own and surface design deltas introduced during implementation rather than landing them silently. **Never push unless asked:** pushing is Anton's call while the GitHub repo is not created.
+**High-level.** Anton reviews direction, interfaces and module boundaries (the RFCs, `pult/decisions`, the seams with the server and the vendored packages), not implementation. Agents commit on their own and surface design deltas introduced during implementation rather than landing them silently. **Never push unless asked:** pushing is Anton's call while the GitHub repo is not created.
 
 ## Glossary
 
@@ -33,17 +33,17 @@ This repo is **Pult's VS Code extension**, step 1 of RFC 1, and a repo of the **
 - `scripts/` - `vendor.ts` and its test, the vendoring; `merge.ts` and its test, the tracked copy's merge; `checkout.ts`, which finds the fork's checkout; and `testWeb.ts`, the headless load's runner.
 - `docs/` - standing notes and runbooks: `development.md`, running against a dev server.
 
-**Never edit `vendor/`.** A bump is a new PIN, `pnpm vendor:sync`, `pnpm i`, `pnpm vendor:merge`, and fixing what the types say; `pnpm vendor:check` fails on drift. The fork's checkout is `PULT_T3CODE_CHECKOUT` (environment or `.env`), by default `~/repos/t3code-extensible`. The PIN is Pult's: bump it here and in Pult together (`DECISIONS.md`, `extension-repo`).
+**Never edit `vendor/`.** A bump is a new PIN, `pnpm vendor:sync`, `pnpm i`, `pnpm vendor:merge`, and fixing what the types say; `pnpm vendor:check` fails on drift. The fork's checkout is `PULT_T3CODE_CHECKOUT` (environment or `.env`), by default `~/repos/t3code-extensible`. The PIN is Pult's: bump it here and in Pult together (`pult/decisions`, `extension-repo`).
 
-**Edit `extension/webview/t3/` sparingly.** It is the fork's `apps/web` at the commit in its `UPSTREAM`, as far as the entry in `webview/src/` reaches it, imports of types included (`DECISIONS.md`, `thread-view-source`). What a thread tab needs from the app around the view goes in files of ours: `webview/src/` mounts upstream's components, and a stub in `webview/stubs.ts` replaces a whole upstream module. Edit a copied file only when neither can do it, and list the edit and its reason in `t3/EDITS.md`. `pnpm vendor:merge` brings the copy to the PIN: it merges upstream's change into each copied file three ways, leaving conflict markers for you, adds the files the entry now reaches and drops unedited ones it no longer does; it says when upstream's `apps/web/package.json` changed, and the webview's dependencies in `extension/package.json` follow it, at the versions the fork's lockfile resolves. A merge that leaves conflicts writes the pin to `t3/MERGING` instead of `UPSTREAM`; resolve the markers and run it again to record it. `pnpm vendor:check` fails while the copy is at another commit, holds a conflict marker, or differs from upstream in a file `t3/EDITS.md` does not list. Formatting and lint skip the copy; `pnpm typecheck` covers it as the entry reaches it.
+**Edit `extension/webview/t3/` sparingly.** It is the fork's `apps/web` at the commit in its `UPSTREAM`, as far as the entry in `webview/src/` reaches it, imports of types included (`pult/decisions`, `thread-view-source`). What a thread tab needs from the app around the view goes in files of ours: `webview/src/` mounts upstream's components, and a stub in `webview/stubs.ts` replaces a whole upstream module. Edit a copied file only when neither can do it, and list the edit and its reason in `t3/EDITS.md`. `pnpm vendor:merge` brings the copy to the PIN: it merges upstream's change into each copied file three ways, leaving conflict markers for you, adds the files the entry now reaches and drops unedited ones it no longer does; it says when upstream's `apps/web/package.json` changed, and the webview's dependencies in `extension/package.json` follow it, at the versions the fork's lockfile resolves. A merge that leaves conflicts writes the pin to `t3/MERGING` instead of `UPSTREAM`; resolve the markers and run it again to record it. `pnpm vendor:check` fails while the copy is at another commit, holds a conflict marker, or differs from upstream in a file `t3/EDITS.md` does not list. Formatting and lint skip the copy; `pnpm typecheck` covers it as the entry reaches it.
 
 ## A web extension
 
-The manifest declares only a `browser` entry, so there is no Node: no `node:` imports, no `process`, no child processes or raw sockets; the network is `fetch` and `WebSocket`. The bundle (`--platform=browser`) and the tsconfig (the `WebWorker` lib, and `types: ["vscode"]` keeping Node's types out) both fail on a Node import (`DECISIONS.md`, `web-extension`). A UX that needs Node is Anton's call (RFC 1: "the day a concrete UX needs Node, web goes"), not a workaround.
+The manifest declares only a `browser` entry, so there is no Node: no `node:` imports, no `process`, no child processes or raw sockets; the network is `fetch` and `WebSocket`. The bundle (`--platform=browser`) and the tsconfig (the `WebWorker` lib, and `types: ["vscode"]` keeping Node's types out) both fail on a Node import (`pult/decisions`, `web-extension`). A UX that needs Node is Anton's call (RFC 1: "the day a concrete UX needs Node, web goes"), not a workaround.
 
 The bundle defines `globalThis.location` as `undefined`: Effect's HTTP client resolves every URL against `location`, which in a worker started from a `blob:` URL, as the extension host is, is no base URL, so every request would fail before it is sent. The define stands until Effect's `Url.baseUrl()` is fixed (`pult/effect-url-base-location`). The thread bundle is a page with a location, a separate build without the define.
 
-A thread tab's page reaches the server only through the host (`DECISIONS.md`, `connection-owner`): its runtime's socket is a virtual one the host multiplexes onto the window's socket, and its `fetch` to the environment is performed by the host, whose origin a server admits where a webview's, which changes per webview, cannot be named.
+A thread tab's page reaches the server only through the host (`pult/decisions`, `connection-owner`): its runtime's socket is a virtual one the host multiplexes onto the window's socket, and its `fetch` to the environment is performed by the host, whose origin a server admits where a webview's, which changes per webview, cannot be named.
 
 ## The two ways to hurt yourself
 
@@ -72,7 +72,7 @@ The most common defect is a change that works on the path you tested and is miss
 
 Most code changes do not need a documentation change.
 
-- A `DECISIONS.md` entry takes the shape in `../axis/workflow/global-agents.md`. Before adding a paragraph, ask what a maintainer would get wrong without it.
+- `docs/` holds what is useless without the checkout. Designs, direction and decisions live in xaxis under `pult/`, since someone without the repo uses them too. Before adding a paragraph, ask what a maintainer would get wrong without it.
 - An effort's plan may sit beside its design as `docs/<effort>-tasks.md` while the effort runs; when the effort ends, both move to `archive/`. Do not commit research notes or agent scratch files.
 
 ## Taste

@@ -55,7 +55,7 @@ export function openThreadTab(
 }
 
 /**
- * The `pult.thread` custom editor (`DECISIONS.md`, `thread-tab-editor`): a
+ * The `pult.thread` custom editor (`pult/decisions`, `thread-tab-editor`): a
  * thread tab's webview runs the thread bundle, whose runtime reaches the
  * server through this host. A visible tab whose thread's title changed, or
  * whose draft's thread has its generated title, is reopened at its new URI with

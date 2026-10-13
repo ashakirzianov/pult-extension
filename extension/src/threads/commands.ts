@@ -75,7 +75,7 @@ export function registerThreadCommands(connection: WindowConnection, model: Thre
       }
     };
   // A server that does not advertise a feature never gets its commands
-  // (`DECISIONS.md`, `capability-gated-rpcs`); their menus hide on the context keys.
+  // (`pult/decisions`, `capability-gated-rpcs`); their menus hide on the context keys.
   const gated =
     (
       feature: keyof ThreadFeatures,
