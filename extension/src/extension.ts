@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 
 import { registerCommands } from "./commands.ts";
+import { shellBridge } from "./shellBridge.ts";
 import { EnvironmentCatalog, WindowBinding } from "./connection/catalog.ts";
 import type { BoundEnvironment } from "./connection/presentation.ts";
 import { WindowConnection } from "./connection/service.ts";
@@ -64,6 +65,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
   // the connection too, so the tabs let go of the socket before it closes.
   const threads = registerThreads({ context, development, catalog, connection, hub });
   context.subscriptions.push(...threads.disposables);
+  // The spike's in-process channel to Pult's own shell; inert elsewhere.
+  context.subscriptions.push(shellBridge(connection, threads.model));
   const updateContext = () =>
     vscode.commands.executeCommand("setContext", "pult.bound", connection.environment !== null);
   void updateContext();
