@@ -17,11 +17,15 @@ export function shellBridge(connection: WindowConnection, model: ThreadsModel): 
     const environment = connection.environment;
     const now = new Date().toISOString();
     const payload = {
-      environment: environment === null ? null : { label: environment.label, phase: environment.phase },
+      environment:
+        environment === null
+          ? null
+          : { id: environment.environmentId, label: environment.label, phase: environment.phase },
       threads: model.threads().map((thread) => ({
         id: thread.id,
         projectId: thread.projectId,
         projectName: model.project(thread.projectId)?.title ?? thread.projectId,
+        projectRoot: model.project(thread.projectId)?.workspaceRoot ?? null,
         title: thread.title,
         branch: thread.branch,
         createdAt: thread.createdAt,
