@@ -7,12 +7,20 @@
 import "../t3/src/index.css";
 import "./shell.css";
 
+import vendoredCommit from "../../../vendor/t3code/COMMIT?raw";
+
 import { followColorScheme } from "../src/theme.ts";
 import { setThreadViewHost, type ThreadViewHost } from "./host.ts";
 import { mountThreadView } from "./ThreadView.tsx";
 
 export type { ThreadViewHost } from "./host.ts";
 export type { ShellConnectionServices } from "./connectionRuntime.ts";
+
+/**
+ * The T3 Code commit this view is built against. The view imports the shell's
+ * vendored packages, so the shell refuses a view whose commit is not its own.
+ */
+export const VENDORED_COMMIT = vendoredCommit.trim();
 
 /**
  * Starts the view on the shell's connection; call once, before any pane
