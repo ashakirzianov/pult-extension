@@ -1,6 +1,6 @@
-// The app around upstream's thread view, in place of the fork's router and
-// root (`t3/src/routes/`): the thread routes the view navigates between, the
-// providers and dialog hosts it expects, and the tab's own rules. A tab holds
+// The app around upstream's thread view, in place of the fork's root: the
+// thread routes (`routes.tsx`), the providers and dialog hosts the view
+// expects, and the tab's own rules. A tab holds
 // one thread; a draft tab follows its draft into the thread it creates, and a
 // navigation to any other thread or a new one goes to its own tab.
 import "../t3/src/index.css";
@@ -8,23 +8,12 @@ import "./vscode.css";
 
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
-import {
-  type AnyRouter,
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  Outlet,
-  RouterProvider,
-  useParams,
-  useRouter,
-} from "@tanstack/react-router";
+import { type AnyRouter, Outlet, RouterProvider, useRouter } from "@tanstack/react-router";
 import { StrictMode, useEffect, useRef, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { ConfirmDialogHost } from "../t3/src/components/ConfirmDialogHost";
 import { CustomSnoozeDialogHost } from "../t3/src/components/CustomSnoozeDialog";
-import { ThreadRouteView } from "../t3/src/components/ThreadRouteView";
 import { SidebarProvider } from "../t3/src/components/ui/sidebar";
 import { AnchoredToastProvider, ToastProvider, toastManager } from "../t3/src/components/ui/toast";
 import { type DraftId, useComposerDraftStore } from "../t3/src/composerDraftStore";
@@ -34,6 +23,7 @@ import { useProjects } from "../t3/src/state/entities";
 import { resolveThreadRouteTarget } from "../t3/src/threadRoutes";
 import { TAB_DRAFT_KEY_PREFIX } from "../../src/threads/protocol.ts";
 import { post } from "./bridge.ts";
+import { makeThreadRouter } from "./routes.tsx";
 import { session } from "./session.ts";
 import { installTestHooks } from "./testHooks.ts";
 
@@ -134,13 +124,6 @@ function Landing() {
   );
 }
 
-function ThreadLayout() {
-  // Both thread routes render here, as upstream's `_chat` layout does, so a
-  // draft's promotion keeps one ChatView mounted across the route swap.
-  const target = useParams({ strict: false, select: resolveThreadRouteTarget });
-  return target ? <ThreadRouteView target={target} /> : <Outlet />;
-}
-
 function Root() {
   return (
     <ToastProvider>
@@ -156,76 +139,8 @@ function Root() {
   );
 }
 
-/** The search parameters the thread view sets on those pages, which the tab never reads. */
-type ElsewhereSearch = Readonly<Record<string, unknown>>;
-
-const anySearch = (search: Record<string, unknown>): ElsewhereSearch => search;
-
-const rootRoute = createRootRoute({ component: Root, notFoundComponent: () => null });
-const threadLayout = createRoute({
-  getParentRoute: () => rootRoute,
-  id: "_chat",
-  component: ThreadLayout,
-});
-const landingRoute = createRoute({
-  getParentRoute: () => threadLayout,
-  path: "/",
-  component: Landing,
-});
-const threadRoute = createRoute({
-  getParentRoute: () => threadLayout,
-  path: "$environmentId/$threadId",
-  component: () => null,
-});
-const draftRoute = createRoute({
-  getParentRoute: () => threadLayout,
-  path: "draft/$draftId",
-  component: () => null,
-});
-
-// The fork's pages the thread view links to, so the links typecheck against
-// this router; landing on one sends the view back (`followNavigation`).
-const pullRequestsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "pull-requests",
-  validateSearch: anySearch,
-});
-const projectRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "projects/$projectKey",
-});
-const settingsRoutes = (
-  ["connections", "providers", "scheduled-tasks", "source-control"] as const
-).map((page) =>
-  createRoute({
-    getParentRoute: () => rootRoute,
-    path: `settings/${page}`,
-    validateSearch: anySearch,
-  }),
-);
-
-const routeTree = rootRoute.addChildren([
-  threadLayout.addChildren([landingRoute, threadRoute, draftRoute]),
-  pullRequestsRoute,
-  projectRoute,
-  ...settingsRoutes,
-]);
-
-function makeRouter() {
-  return createRouter({
-    routeTree,
-    history: createMemoryHistory({ initialEntries: [tabPath()] }),
-  });
-}
-
-declare module "@tanstack/react-router" {
-  interface Register {
-    router: ReturnType<typeof makeRouter>;
-  }
-}
-
 export function mountThreadApp(root: HTMLElement) {
-  const router = makeRouter();
+  const router = makeThreadRouter({ root: Root, landing: Landing, initialPath: tabPath() });
   if (session().development) installTestHooks(router);
   createRoot(root).render(
     <StrictMode>

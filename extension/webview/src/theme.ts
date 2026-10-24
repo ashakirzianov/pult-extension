@@ -1,7 +1,8 @@
-// The thread view follows the system's colour scheme by default. In a webview
-// the system is VS Code: the body's theme class (`vscode-dark`, `vscode-light`,
-// and the high-contrast pair) answers `prefers-color-scheme`, and a theme
-// change fires the query's `change`.
+// The thread view follows the system's colour scheme by default. In VS Code
+// the system is VS Code's theme: a class on an element answers
+// `prefers-color-scheme`, and a theme change fires the query's `change`. In a
+// webview it is the body's (`vscode-dark`, `vscode-light`, and the
+// high-contrast pair); in Pult's shell, the workbench's (`../shell/main.tsx`).
 
 const SCHEME_QUERY = /\(\s*prefers-color-scheme\s*:\s*(dark|light)\s*\)/;
 
@@ -11,16 +12,21 @@ function vscodeIsDark(): boolean {
 }
 
 export function followVsCodeTheme(): void {
+  followColorScheme(document.body, vscodeIsDark);
+}
+
+/** `prefers-color-scheme` answered by `isDark`, asked again whenever `element`'s classes change. */
+export function followColorScheme(element: Element, isDark: () => boolean): void {
   const native = window.matchMedia.bind(window);
   // One list per query text, as a browser keeps them live.
   const lists = new Map<string, { readonly list: MediaQueryList; readonly notify: () => void }>();
-  let dark = vscodeIsDark();
+  let dark = isDark();
   new MutationObserver(() => {
-    const next = vscodeIsDark();
+    const next = isDark();
     if (next === dark) return;
     dark = next;
     for (const { notify } of lists.values()) notify();
-  }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  }).observe(element, { attributes: true, attributeFilter: ["class"] });
 
   window.matchMedia = (media: string): MediaQueryList => {
     const scheme = SCHEME_QUERY.exec(media)?.[1];
