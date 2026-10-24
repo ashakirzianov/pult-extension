@@ -10,19 +10,22 @@ type Listener = (event: Socket.WebSocketEvent) => void;
  * A real socket as the host's runtime sees it: the server's frames, less those
  * addressed to webviews, which its multiplexer routes to them.
  */
+/** A socket the hub can tap: a browser WebSocket, or the shell's (`../connection/shell.ts`). */
+type TappableSocket = Socket.WebSocketLike & { binaryType: BinaryType };
+
 class TappedWebSocket implements Socket.WebSocketLike {
   readonly mux: SocketMux;
-  private readonly socket: WebSocket;
+  private readonly socket: TappableSocket;
   private readonly listeners = new Map<EventType, Map<Listener, boolean>>();
 
-  constructor(socket: WebSocket, hub: SocketHub) {
+  constructor(socket: TappableSocket, hub: SocketHub) {
     this.socket = socket;
     this.mux = new SocketMux((frame) => socket.send(frame));
     socket.addEventListener("open", (event) => {
       hub.opened(this);
       this.dispatch("open", event);
     });
-    socket.addEventListener("message", (event: MessageEvent<unknown>) => {
+    socket.addEventListener("message", (event) => {
       if (typeof event.data !== "string") return this.dispatch("message", event);
       const own = this.mux.fromServer(event.data);
       if (own === undefined) return;
@@ -106,11 +109,21 @@ export class SocketHub implements vscode.Disposable {
   /** A real socket opened: webviews waiting to reconnect may retry now. */
   readonly onDidOpen = this.opens.event;
 
+  /** Dials the real socket: a browser WebSocket, or in Pult the shell's. */
+  private readonly dial: (url: string, protocols?: string | Array<string>) => TappableSocket;
+
+  constructor(
+    dial: (url: string, protocols?: string | Array<string>) => TappableSocket = (url, protocols) =>
+      new WebSocket(url, protocols),
+  ) {
+    this.dial = dial;
+  }
+
   readonly webSocketConstructor = (url: string, options?: Socket.WebSocketConstructorOptions) => {
     if (typeof options === "object" && !Array.isArray(options)) {
       throw new Error("A browser WebSocket cannot set handshake headers.");
     }
-    return new TappedWebSocket(new WebSocket(url, options), this);
+    return new TappedWebSocket(this.dial(url, options), this);
   };
 
   open(events: VirtualSocketEvents): VirtualSocket {

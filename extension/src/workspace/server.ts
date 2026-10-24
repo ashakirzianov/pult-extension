@@ -75,7 +75,7 @@ export function connectionServer(
         environment === null ? undefined : Option.getOrUndefined(environment.prepared);
       if (prepared === undefined) throw unavailable(environment);
       const authorization = prepared.httpAuthorization;
-      const response = await fetch(new URL(relativeUrl, prepared.httpBaseUrl), {
+      const response = await connection.fetch(new URL(relativeUrl, prepared.httpBaseUrl), {
         headers:
           authorization?._tag === "Bearer"
             ? { authorization: `Bearer ${authorization.token}` }

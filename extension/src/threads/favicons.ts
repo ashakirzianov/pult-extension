@@ -87,7 +87,7 @@ export class ProjectFavicons implements vscode.Disposable {
     if (isProjectFaviconFallbackUrl(asset.relativeUrl)) return null;
     const prepared = Option.getOrUndefined(this.connection.environment?.prepared ?? Option.none());
     if (prepared === undefined) throw new Error("The environment is not connected.");
-    const response = await fetch(new URL(asset.relativeUrl, prepared.httpBaseUrl));
+    const response = await this.connection.fetch(new URL(asset.relativeUrl, prepared.httpBaseUrl));
     if (!response.ok) return null;
     const contentType = response.headers.get("content-type")?.split(";")[0] ?? "image/png";
     return dataUri(contentType, new Uint8Array(await response.arrayBuffer()));

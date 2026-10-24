@@ -5,6 +5,12 @@ import { shellBridge } from "./shellBridge.ts";
 import { EnvironmentCatalog, WindowBinding } from "./connection/catalog.ts";
 import type { BoundEnvironment } from "./connection/presentation.ts";
 import { WindowConnection } from "./connection/service.ts";
+import {
+  followShell,
+  IN_PULT_SHELL,
+  memoryCatalogStorage,
+  ShellConnectionClient,
+} from "./connection/shell.ts";
 import { connectionStatusBar } from "./statusBar.ts";
 import { registerThreads } from "./threads/index.ts";
 import { threadStatus } from "./threads/presentation.ts";
@@ -48,7 +54,17 @@ export interface TestThread {
  */
 export async function activate(context: vscode.ExtensionContext): Promise<PultTestApi | undefined> {
   const development = context.extensionMode !== vscode.ExtensionMode.Production;
-  const catalog = new EnvironmentCatalog(context.globalState, context.secrets);
+  // In Pult the page owns the connection (`connection/shell.ts`): the catalog
+  // holds only the shell's environment, and the window connection runs over
+  // the shell's socket and fetch.
+  const shell = IN_PULT_SHELL ? await ShellConnectionClient.start() : undefined;
+  const storage = shell === undefined ? context : memoryCatalogStorage();
+  const catalog = new EnvironmentCatalog(storage.globalState, storage.secrets);
+  if (shell?.environment != null) {
+    const { profile, credential } = shell.registration(shell.environment);
+    await catalog.saveProfile(profile);
+    await catalog.saveCredential(profile.environmentId, credential.token);
+  }
   const binding = new WindowBinding(context.workspaceState);
   const bound = binding.environmentId;
   // Forgotten in another window while this one was closed.
@@ -56,11 +72,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
   // The virtual workspace: an unbound window binds to the environment its `pult:` folders name.
   const unpaired = await bindToFolders(catalog, binding);
 
-  const hub = new SocketHub();
-  const connection = new WindowConnection(catalog, binding, hub);
+  const hub = new SocketHub(shell?.webSocketConstructor);
+  const connection = new WindowConnection(catalog, binding, hub, shell?.fetch);
   let stock = false;
-  // Before the connection, so the folders' watches stop before it does.
-  context.subscriptions.push(...virtualWorkspace(connection, binding, unpaired, () => stock));
+  // Before the connection, so the folders' watches stop before it does. In
+  // Pult the shell pairs, so unpaired folders offer nothing.
+  context.subscriptions.push(
+    ...virtualWorkspace(
+      connection,
+      binding,
+      shell === undefined ? unpaired : undefined,
+      () => stock,
+    ),
+  );
   // The threads: the picker, the tabs, their decorations and commands; before
   // the connection too, so the tabs let go of the socket before it closes.
   const threads = registerThreads({ context, development, catalog, connection, hub });
@@ -70,6 +94,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
   const updateContext = () =>
     vscode.commands.executeCommand("setContext", "pult.bound", connection.environment !== null);
   void updateContext();
+  if (shell !== undefined) context.subscriptions.push(followShell(shell, connection));
   context.subscriptions.push(
     connection,
     hub,
@@ -89,6 +114,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
       }
     }),
   );
+  // Disposed after the connection, so its socket closes before the shell's bridge does.
+  if (shell !== undefined) context.subscriptions.push(shell);
   return development
     ? testApi(connection, threads, () => {
         stock = true;

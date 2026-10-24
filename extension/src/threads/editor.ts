@@ -141,6 +141,11 @@ export class ThreadEditorProvider
     };
   }
 
+  /** @internal `fetch` for the environment, the connection's: in Pult the shell's. */
+  get environmentFetch(): typeof globalThis.fetch {
+    return this.deps.connection.fetch;
+  }
+
   /** @internal What a new tab's page starts from: the window's share, no drafts. */
   get sharedStorage(): TabStorage {
     return this.shared;
@@ -502,7 +507,7 @@ class ThreadPanel {
     const controller = new AbortController();
     this.fetches.set(requestId, controller);
     try {
-      const response = await fetch(message.url, {
+      const response = await this.provider.environmentFetch(message.url, {
         method: message.method,
         headers: message.headers.map(([name, value]) => [name, value]),
         ...(message.body === null ? {} : { body: message.body }),

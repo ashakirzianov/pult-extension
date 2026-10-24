@@ -6,12 +6,13 @@ import * as vscode from "vscode";
 import type { EnvironmentCatalog } from "./connection/catalog.ts";
 import { parseConnectInput } from "./connection/pairing.ts";
 import { ProbeError } from "./connection/probe.ts";
+import { IN_PULT_SHELL } from "./connection/shell.ts";
 import type { WindowConnection } from "./connection/service.ts";
 import { namesEnvironment } from "./workspace/paths.ts";
 
 /**
  * In `development`, `pult.connect` given a pairing link connects without a
- * prompt, for the headless load. Never in production: any extension, or a
+ * prompt, for the headless load (in Pult, the shell's development build does). Never in production: any extension, or a
  * trusted command link, could bind the window to a server of its choosing.
  * `folders` is the environment the window's `pult:` folders name.
  */
@@ -21,6 +22,25 @@ export function registerCommands(
   development: boolean,
   folders: () => EnvironmentId | undefined,
 ) {
+  if (IN_PULT_SHELL) {
+    // The page owns the connection and its prompts: these defer to the shell's
+    // commands, so the palette has one entry each. The page forgets its
+    // environment on disconnect, so Forget is Disconnect there.
+    return [
+      vscode.commands.registerCommand("pult.connect", (pairingLink?: unknown) =>
+        vscode.commands.executeCommand(
+          "pult-shell.connect",
+          ...(development && typeof pairingLink === "string" ? [pairingLink] : []),
+        ),
+      ),
+      vscode.commands.registerCommand("pult.disconnect", () =>
+        vscode.commands.executeCommand("pult-shell.disconnect"),
+      ),
+      vscode.commands.registerCommand("pult.forget", () =>
+        vscode.commands.executeCommand("pult-shell.disconnect"),
+      ),
+    ];
+  }
   return [
     vscode.commands.registerCommand("pult.connect", (pairingLink?: unknown) =>
       development && typeof pairingLink === "string"

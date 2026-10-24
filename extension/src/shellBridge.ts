@@ -45,9 +45,11 @@ export function shellBridge(connection: WindowConnection, model: ThreadsModel): 
         goal: thread.goal?.objective ?? null,
       })),
     };
-    vscode.commands.executeCommand("pult-shell.threads", payload).then(undefined, (error: unknown) => {
-      console.warn("[pult] shell bridge push failed", error);
-    });
+    vscode.commands
+      .executeCommand("pult-shell.threads", payload)
+      .then(undefined, (error: unknown) => {
+        console.warn("[pult] shell bridge push failed", error);
+      });
   };
   push();
   return vscode.Disposable.from(model.onDidChange(push), connection.onDidChange(push));

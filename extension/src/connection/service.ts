@@ -37,13 +37,24 @@ export class WindowConnection implements vscode.Disposable {
   private current: BoundEnvironment | null = null;
   private readonly changes = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changes.event;
+  /** `fetch` for the environment's HTTP routes; in Pult the shell's, which holds the bearer. */
+  readonly fetch: typeof globalThis.fetch;
 
-  constructor(catalog: EnvironmentCatalog, binding: WindowBinding, hub: SocketHub) {
+  constructor(
+    catalog: EnvironmentCatalog,
+    binding: WindowBinding,
+    hub: SocketHub,
+    fetch: typeof globalThis.fetch = (input, init) => globalThis.fetch(input, init),
+  ) {
     this.binding = binding;
+    this.fetch = fetch;
     this.runtime = ManagedRuntime.make(
       Layer.mergeAll(Connection.layer, ShellSnapshotLoader.layer).pipe(
         Layer.provideMerge(
-          Layer.mergeAll(platformLayer(hub.webSocketConstructor), catalogLayer(catalog, binding)),
+          Layer.mergeAll(
+            platformLayer(hub.webSocketConstructor, fetch),
+            catalogLayer(catalog, binding),
+          ),
         ),
       ),
     );
