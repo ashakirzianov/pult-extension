@@ -19,6 +19,7 @@ import * as Option from "effect/Option";
 import * as vscode from "vscode";
 
 import type { WindowConnection } from "../connection/service.ts";
+import { IN_PULT_SHELL } from "../connection/shell.ts";
 import { openThreadTab } from "./editor.ts";
 import type { ThreadsModel } from "./model.ts";
 import type { ThreadFeatures } from "./presentation.ts";
@@ -90,13 +91,17 @@ export function registerThreadCommands(connection: WindowConnection, model: Thre
   const command = (input: { readonly threadId: string }) => ({
     threadId: ThreadId.make(input.threadId),
   });
+  // In Pult the shell shows a thread in its own pane, which it selects; the
+  // thread tabs' webviews are VS Code's.
   const open = (target: EnvironmentThreadShell, options: vscode.TextDocumentShowOptions = {}) =>
-    openThreadTab(
-      { kind: "thread", threadId: target.id },
-      target.environmentId,
-      target.title,
-      options,
-    );
+    IN_PULT_SHELL
+      ? vscode.commands.executeCommand("pult-shell.selectThread", target.id)
+      : openThreadTab(
+          { kind: "thread", threadId: target.id },
+          target.environmentId,
+          target.title,
+          options,
+        );
 
   return [
     vscode.commands.registerCommand(
