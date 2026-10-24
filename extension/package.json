@@ -18,12 +18,13 @@
   "scripts": {
     "bundle:host": "esbuild src/extension.ts --bundle --platform=browser --format=cjs --target=es2022 --external:vscode --define:globalThis.location=undefined --outfile=dist/web/extension.js",
     "bundle:webview": "vp build --config webview/vite.config.ts",
-    "build": "pnpm run bundle:host --sourcemap && pnpm run bundle:webview --sourcemap",
+    "build": "pnpm run bundle:host --sourcemap && pnpm run bundle:webview --sourcemap && pnpm run bundle:shell --sourcemap",
     "watch": "pnpm run bundle:host --sourcemap --watch",
     "watch:webview": "pnpm run bundle:webview --sourcemap --watch",
-    "vscode:prepublish": "pnpm run bundle:host --minify && pnpm run bundle:webview",
+    "vscode:prepublish": "pnpm run bundle:host --minify && pnpm run bundle:webview && pnpm run bundle:shell",
     "package": "mkdir -p ../release && vsce package --no-dependencies --out ../release/",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p webview"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p webview",
+    "bundle:shell": "vp build --config webview/vite.config.ts --mode shell"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",

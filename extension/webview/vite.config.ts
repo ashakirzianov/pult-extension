@@ -3,22 +3,26 @@
 // builds its web app (the React Compiler, Tailwind), into dist/webview/. The
 // host bundle is esbuild's (package.json); this one is a separate build with no
 // `globalThis.location` define, since a webview is a page with a location.
+// `--mode shell` builds the same view for Pult's shell instead: `shell/main.tsx`
+// as a module the shell's page imports, into dist/shell/, with React, Effect
+// and the vendored packages left to the shell's copies.
 import * as NodePath from "node:path";
 
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite-plus";
+import { type BuildEnvironmentOptions, defineConfig, type Plugin } from "vite-plus";
+import { esmExternalRequirePlugin } from "vite/rolldown/plugins";
 
-import { STUBS } from "./stubs.ts";
+import { SHELL_STUBS, STUBS } from "./stubs.ts";
 
 const webview = import.meta.dirname;
 const copy = NodePath.join(webview, "t3");
 
 /** Resolves an import of a stubbed upstream module to its replacement (`stubs.ts`). */
-function stubs(): Plugin {
+function stubs(map: Readonly<Record<string, string>>): Plugin {
   const replacements = new Map(
-    Object.entries(STUBS).map(([upstream, ours]) => [
+    Object.entries(map).map(([upstream, ours]) => [
       NodePath.join(copy, upstream),
       NodePath.join(webview, ours),
     ]),
@@ -66,13 +70,57 @@ const env = {
   APP_VERSION: "pult-extension",
 };
 
-export default defineConfig({
+/** The packages the shell's page holds one copy of, which its build imports rather than bundles. */
+const SHELL_EXTERNAL =
+  /^(react|react-dom|effect|@t3tools\/(client-runtime|contracts|shared))($|\/)/;
+
+const webviewBuild: BuildEnvironmentOptions = {
+  outDir: NodePath.join(webview, "../dist/webview"),
+  emptyOutDir: true,
+  cssCodeSplit: false,
+  rollupOptions: {
+    input: NodePath.join(webview, "src/main.tsx"),
+    output: {
+      entryFileNames: "thread.js",
+      chunkFileNames: "chunks/[name]-[hash].js",
+      assetFileNames: (asset) =>
+        asset.names.some((name) => name.endsWith(".css"))
+          ? "thread.css"
+          : "assets/[name]-[hash][extname]",
+    },
+  },
+};
+
+const shellBuild: BuildEnvironmentOptions = {
+  outDir: NodePath.join(webview, "../dist/shell"),
+  emptyOutDir: true,
+  cssCodeSplit: false,
+  lib: {
+    entry: NodePath.join(webview, "shell/main.tsx"),
+    formats: ["es"],
+    fileName: () => "thread.js",
+  },
+  rollupOptions: {
+    // The bundled CommonJS packages `require` React, which an ES module
+    // cannot: their requires of the externals become imports.
+    plugins: [esmExternalRequirePlugin({ external: [SHELL_EXTERNAL] })],
+    output: {
+      chunkFileNames: "chunks/[name]-[hash].js",
+      assetFileNames: (asset) =>
+        asset.names.some((name) => name.endsWith(".css"))
+          ? "thread.css"
+          : "assets/[name]-[hash][extname]",
+    },
+  },
+};
+
+export default defineConfig(({ mode }) => ({
   root: webview,
   // Assets resolve against the bundle's own URL, which `asWebviewUri` gives.
   base: "./",
   assetsInclude: ["**/*.wasm"],
   plugins: [
-    stubs(),
+    stubs(mode === "shell" ? SHELL_STUBS : STUBS),
     inlineWorkers(),
     react(),
     babel({
@@ -88,20 +136,5 @@ export default defineConfig({
     alias: { "~": NodePath.join(copy, "src") },
     dedupe: ["react", "react-dom"],
   },
-  build: {
-    outDir: NodePath.join(webview, "../dist/webview"),
-    emptyOutDir: true,
-    cssCodeSplit: false,
-    rollupOptions: {
-      input: NodePath.join(webview, "src/main.tsx"),
-      output: {
-        entryFileNames: "thread.js",
-        chunkFileNames: "chunks/[name]-[hash].js",
-        assetFileNames: (asset) =>
-          asset.names.some((name) => name.endsWith(".css"))
-            ? "thread.css"
-            : "assets/[name]-[hash][extname]",
-      },
-    },
-  },
-});
+  build: mode === "shell" ? shellBuild : webviewBuild,
+}));

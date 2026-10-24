@@ -1,0 +1,31 @@
+/* The thread view in a pane of Pult's shell, after upstream's stylesheet:
+   with no T3 theme chosen, its canvas and text follow the editor's and its
+   sans font the workbench's, whose variables live on the workbench element,
+   not on the document's root as in a webview. */
+html:not([data-theme-id]) .pult-thread-view {
+  --background: var(--vscode-editor-background);
+  --foreground: var(--vscode-editor-foreground);
+  --font-sans: var(--vscode-font-family);
+}
+
+.pult-thread-view {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* The view sizes itself to the viewport, which a webview tab fills; a pane
+   is smaller, so the view's viewport heights are the pane's. */
+.pult-thread-view .h-svh,
+.pult-thread-view .h-dvh,
+.pult-thread-view .md\:h-dvh {
+  height: 100%;
+}
+
+.pult-thread-view .min-h-svh {
+  min-height: 0;
+  height: 100%;
+}

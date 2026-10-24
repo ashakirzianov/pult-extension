@@ -17,3 +17,13 @@ export const STUBS: Readonly<Record<string, string>> = {
   // dropped without the unload that flushes it.
   "src/lib/storage.ts": "src/stubs/storage.ts",
 };
+
+/**
+ * The shell's build (`shell/main.tsx`): its own composition root, over the
+ * connection the page owns, and no 3D models. The page is one document that
+ * unloads as any page does, so upstream's deferred storage stays.
+ */
+export const SHELL_STUBS: Readonly<Record<string, string>> = {
+  "src/connection/runtime.ts": "shell/connectionRuntime.ts",
+  "src/components/device/deviceModels.ts": "src/stubs/deviceModels.ts",
+};

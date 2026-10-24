@@ -14,5 +14,5 @@
     }
   },
   // The copy is checked as far as the entry reaches it, as `pnpm vendor:merge` copies it.
-  "include": ["src", "t3/src/vite-env.d.ts"]
+  "include": ["src", "shell", "t3/src/vite-env.d.ts"]
 }
