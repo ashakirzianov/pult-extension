@@ -269,25 +269,41 @@ export function memoryCatalogStorage() {
  * Keeps the window connection on the shell's environment: connected to it,
  * with the stand-in bearer, while the page is, and disconnected when the page
  * disconnects. The shell reconnects the page after a reload; this follows.
+ * It acts on the environment it last asked for, starting from the window's
+ * binding, which the registry connects at activation: the connection's own
+ * state lags behind, and registering an environment twice restarts its
+ * connection midway. The window's socket rides on the page's, so when the
+ * page's connection becomes ready a window connection still waiting between
+ * attempts retries at once.
  */
 export function followShell(
   shell: ShellConnectionClient,
   connection: {
-    readonly environment: { readonly environmentId: string } | null;
+    readonly environment: { readonly phase: string } | null;
     connect(registration: BearerConnectionRegistration): Promise<void>;
     disconnect(): Promise<void>;
+    retryNow(): Promise<void>;
   },
+  bound: string | undefined,
 ): vscode.Disposable {
   let queue = Promise.resolve();
+  let requested = bound;
+  let shellPhase: string | undefined;
   const sync = () => {
     queue = queue
       .then(async () => {
         const next = shell.environment;
-        const bound = connection.environment?.environmentId;
+        const becameReady = next?.phase === "ready" && shellPhase !== "ready";
+        shellPhase = next?.phase;
         if (next === null) {
-          if (bound !== undefined) await connection.disconnect();
-        } else if (bound !== next.environmentId) {
+          if (requested === undefined) return;
+          requested = undefined;
+          await connection.disconnect();
+        } else if (requested !== next.environmentId) {
+          requested = next.environmentId;
           await connection.connect(shell.registration(next));
+        } else if (becameReady && connection.environment?.phase !== "ready") {
+          await connection.retryNow();
         }
       })
       .catch((error: unknown) => {

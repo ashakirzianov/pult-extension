@@ -94,7 +94,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
   const updateContext = () =>
     vscode.commands.executeCommand("setContext", "pult.bound", connection.environment !== null);
   void updateContext();
-  if (shell !== undefined) context.subscriptions.push(followShell(shell, connection));
+  if (shell !== undefined) {
+    context.subscriptions.push(followShell(shell, connection, binding.environmentId));
+  }
   context.subscriptions.push(
     connection,
     hub,
