@@ -58,6 +58,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
   // holds only the shell's environment, and the window connection runs over
   // the shell's socket and fetch.
   const shell = IN_PULT_SHELL ? await ShellConnectionClient.start() : undefined;
+  if (shell !== undefined) {
+    // What the extension paired on its own in Pult before the shell owned the
+    // connection, a real bearer among it, goes.
+    const persisted = new EnvironmentCatalog(context.globalState, context.secrets);
+    await Promise.all(persisted.list().map((profile) => persisted.forget(profile.environmentId)));
+  }
   const storage = shell === undefined ? context : memoryCatalogStorage();
   const catalog = new EnvironmentCatalog(storage.globalState, storage.secrets);
   if (shell?.environment != null) {
