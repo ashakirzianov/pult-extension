@@ -26,9 +26,13 @@ export interface ShellEnvironment {
   readonly error: string | null;
 }
 
-/** What the shell tells the extension, in order (`pult` repo, `src/connection/bridge.ts`). */
+/**
+ * What the shell tells the extension, in order (`pult` repo,
+ * `src/connection/bridge.ts`). Any extension can run `pult.shellEvents`, so an
+ * environment event only says to read the environment from the shell again.
+ */
 type ShellEvent =
-  | { readonly type: "environment"; readonly environment: ShellEnvironment | null }
+  | { readonly type: "environment" }
   | { readonly type: "socket.opened"; readonly socketId: string }
   | { readonly type: "socket.message"; readonly socketId: string; readonly data: string }
   | {
@@ -155,24 +159,39 @@ export class ShellConnectionClient implements vscode.Disposable {
   private readonly changes = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changes.event;
   private readonly command: vscode.Disposable;
+  private reads = Promise.resolve();
 
   private constructor() {
     this.command = vscode.commands.registerCommand(
       "pult.shellEvents",
       (events: ReadonlyArray<ShellEvent>) => {
         for (const event of events) {
-          if (event.type === "environment") {
-            this.current = event.environment;
-            this.changes.fire();
-          } else {
-            this.sockets.get(event.socketId)?.receive(event);
-          }
+          if (event.type === "environment") this.read();
+          else this.sockets.get(event.socketId)?.receive(event);
         }
       },
     );
   }
 
-  /** Subscribes to the shell's environment, which it answers as it stands. */
+  /** Reads the environment from the shell, one read after another, so the last answer stands. */
+  private read() {
+    this.reads = this.reads
+      .then(async () => {
+        this.current =
+          (await vscode.commands.executeCommand<ShellEnvironment | null>(
+            "pult-shell.environment",
+          )) ?? null;
+        this.changes.fire();
+      })
+      .catch((error: unknown) =>
+        console.warn("[pult] reading the shell's environment failed", error),
+      );
+  }
+
+  /**
+   * Subscribes to the shell's environment, which it answers as it stands. The
+   * shell closes the sockets an earlier instance of the extension left open.
+   */
   static async start(): Promise<ShellConnectionClient> {
     const client = new ShellConnectionClient();
     client.current =
