@@ -25,6 +25,11 @@ html:not([data-theme-id]) .pult-thread-view {
   height: 100%;
 }
 
+/* The workbench outlines every focused editable; the composer draws its own. */
+.monaco-workbench .pult-thread-view [contenteditable="true"]:focus {
+  outline: none;
+}
+
 .pult-thread-view .min-h-svh {
   min-height: 0;
   height: 100%;
