@@ -93,6 +93,12 @@
   "contributes": {
     "commands": [
       {
+        "command": "pult.refreshChanges",
+        "title": "Refresh Changes",
+        "category": "Pult",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "pult.connect",
         "title": "Connect to Environment",
         "category": "Pult",
@@ -232,7 +238,18 @@
       }
     ],
     "menus": {
+      "scm/title": [
+        {
+          "command": "pult.refreshChanges",
+          "group": "navigation",
+          "when": "scmProvider == pult"
+        }
+      ],
       "commandPalette": [
+        {
+          "command": "pult.refreshChanges",
+          "when": "pult.bound"
+        },
         {
           "command": "pult.disconnect",
           "when": "pult.bound"
@@ -499,43 +516,43 @@
     ],
     "colors": [
       {
-        "id": "pult.ignoredResourceForeground",
-        "description": "Color of an entry the environment's Git ignores, in a `pult:` workspace folder.",
+        "id": "gitDecoration.modifiedResourceForeground",
+        "description": "Color for modified resources.",
         "defaults": {
-          "dark": "#8C8C8C",
-          "light": "#8E8E90",
-          "highContrast": "#A7A8A9",
-          "highContrastLight": "#8E8E90"
+          "light": "#895503",
+          "dark": "#E2C08D",
+          "highContrast": "#E2C08D",
+          "highContrastLight": "#895503"
         }
       },
       {
-        "id": "pult.threadRunning",
-        "description": "A thread whose agent is at work, or waiting on its background work: its badge in the Pult picker and on its tab.",
+        "id": "gitDecoration.addedResourceForeground",
+        "description": "Color for added resources.",
         "defaults": {
-          "dark": "charts.blue",
-          "light": "charts.blue",
-          "highContrast": "charts.blue",
-          "highContrastLight": "charts.blue"
+          "light": "#587c0c",
+          "dark": "#81b88b",
+          "highContrast": "#81b88b",
+          "highContrastLight": "#587c0c"
         }
       },
       {
-        "id": "pult.threadWaiting",
-        "description": "A thread waiting on you: an approval, a question, a plan, or a snooze that ended.",
+        "id": "gitDecoration.deletedResourceForeground",
+        "description": "Color for deleted resources.",
         "defaults": {
-          "dark": "charts.yellow",
-          "light": "charts.yellow",
-          "highContrast": "charts.yellow",
-          "highContrastLight": "charts.yellow"
+          "light": "#ad0707",
+          "dark": "#c74e39",
+          "highContrast": "#c74e39",
+          "highContrastLight": "#ad0707"
         }
       },
       {
-        "id": "pult.threadFailed",
-        "description": "A thread whose run failed.",
+        "id": "gitDecoration.renamedResourceForeground",
+        "description": "Color for renamed resources.",
         "defaults": {
-          "dark": "errorForeground",
-          "light": "errorForeground",
-          "highContrast": "errorForeground",
-          "highContrastLight": "errorForeground"
+          "light": "#007100",
+          "dark": "#73C991",
+          "highContrast": "#73C991",
+          "highContrastLight": "#007100"
         }
       }
     ]

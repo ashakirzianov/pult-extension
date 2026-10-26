@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 
+import { registerChanges } from "./changes/index.ts";
 import { registerCommands } from "./commands.ts";
 import { shellBridge } from "./shellBridge.ts";
 import { EnvironmentCatalog, WindowBinding } from "./connection/catalog.ts";
@@ -97,6 +98,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<PultTe
   context.subscriptions.push(...threads.disposables);
   // The spike's in-process channel to Pult's own shell; inert elsewhere.
   context.subscriptions.push(shellBridge(connection, threads.model));
+  // The changes view, the Source Control view over the selected thread's project.
+  context.subscriptions.push(...registerChanges({ connection, binding, model: threads.model }));
   const updateContext = () =>
     vscode.commands.executeCommand("setContext", "pult.bound", connection.environment !== null);
   void updateContext();

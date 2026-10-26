@@ -102,7 +102,8 @@ export function connectionServer(
   };
 }
 
-function whenReady(connection: WindowConnection, binding: WindowBinding): Promise<void> {
+/** Resolves once the window is connected; rejects at once for an offline or blocked window, and after a wait for one that never connects. */
+export function whenReady(connection: WindowConnection, binding: WindowBinding): Promise<void> {
   return new Promise((resolve, reject) => {
     const settle = () => {
       const environment = connection.environment;
