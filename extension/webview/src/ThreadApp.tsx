@@ -39,9 +39,12 @@ function heldDraft(tabDraftId: string): DraftId | null {
 /** Where the tab's own thread is in the view's routes. */
 function tabPath(): string {
   const { environment, target } = session();
-  if (target.kind === "thread") return `/${environment.environmentId}/${target.threadId}`;
+  // Encoded: the router decodes path parameters, and an id may itself hold an escape (`command%3Amcp…`).
+  if (target.kind === "thread") {
+    return `/${encodeURIComponent(environment.environmentId)}/${encodeURIComponent(target.threadId)}`;
+  }
   const draftId = heldDraft(target.draftId);
-  return draftId === null ? "/" : `/draft/${draftId}`;
+  return draftId === null ? "/" : `/draft/${encodeURIComponent(draftId)}`;
 }
 
 function returnToTab(router: AnyRouter) {

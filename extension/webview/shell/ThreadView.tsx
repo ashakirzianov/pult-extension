@@ -74,7 +74,9 @@ function Landing() {
 export function mountThreadView(element: HTMLElement, threadId: string): { dispose(): void } {
   const environmentId = threadViewHost().environmentId();
   if (environmentId !== null) closeThreadPanel(environmentId, threadId);
-  const home = environmentId === null ? "/" : `/${environmentId}/${threadId}`;
+  // Encoded: the router decodes path parameters, and an id may itself hold an escape (`command%3Amcp…`).
+  const home =
+    environmentId === null ? "/" : `/${encodeURIComponent(environmentId)}/${encodeURIComponent(threadId)}`;
   const router = makeThreadRouter({
     root: makeRoot(home, threadId),
     landing: Landing,
