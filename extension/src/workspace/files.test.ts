@@ -385,21 +385,25 @@ describe("WorkspaceFiles on either server", () => {
     ["stock", STOCK],
     ["capable", CAPABLE],
   ] as const) {
-    it(`refuses writes outside the folders and of non-UTF-8 bytes (${name})`, async () => {
+    it(`refuses writes outside the known roots and of non-UTF-8 bytes (${name})`, async () => {
       const { server, files } = setup(enabled);
       server.put(`${OTHER_PROJECT}/x.ts`, "x");
 
-      // A cited file outside the folders reads, against its project root, and opens read-only.
+      // A file of another project, outside the folders, reads and writes against that project's root.
       expect(decode(await files.readFile(`${OTHER_PROJECT}/x.ts`))).toBe("x");
-      expect((await files.stat(`${OTHER_PROJECT}/x.ts`)).readonly).toBe(true);
-      expect(
-        (await rejection(files.writeFile(`${OTHER_PROJECT}/x.ts`, text("y"), SAVE))).code,
-      ).toBe("NoPermissions");
+      expect((await files.stat(`${OTHER_PROJECT}/x.ts`)).readonly).toBe(false);
+      await files.writeFile(`${OTHER_PROJECT}/x.ts`, text("y"), SAVE);
+      expect(decode(await files.readFile(`${OTHER_PROJECT}/x.ts`))).toBe("y");
+      // A path under no known root is refused.
+      expect((await rejection(files.writeFile(`/nowhere/x.ts`, text("y"), SAVE))).code).toBe(
+        "NoPermissions",
+      );
       const latin1 = new Uint8Array([0x63, 0x61, 0x66, 0xe9]);
       expect((await rejection(files.writeFile(`${ROOT}/src/a.ts`, latin1, SAVE))).code).toBe(
         "NoPermissions",
       );
-      expect(server.writes).toEqual([]);
+      // The one write that went through is the other project's, against its own root.
+      expect(server.writes.map((write) => write.path)).toEqual([`${OTHER_PROJECT}/x.ts`]);
     });
 
     it(`opens a truncated file read-only and never writes it back (${name})`, async () => {

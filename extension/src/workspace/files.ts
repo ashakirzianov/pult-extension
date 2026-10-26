@@ -143,7 +143,7 @@ export interface Change {
 export interface WorkspaceFilesHost {
   /** The window's workspace folders: the roots browsed, watched and written under. */
   readonly roots: () => ReadonlyArray<string>;
-  /** The environment's project and worktree roots, against which a cited file outside the folders is read. */
+  /** The environment's project and worktree roots, against which a file outside the folders is read and written. */
   readonly knownRoots: () => ReadonlyArray<string>;
   /** The documents open in the window. */
   readonly openPaths: () => ReadonlyArray<string>;
@@ -214,7 +214,7 @@ export class WorkspaceFiles implements Disposable {
   async stat(path: string): Promise<Stat> {
     const target = this.target(path);
     const features = await this.server.features();
-    const readonly = target.folder === undefined || this.readOnly.has(path);
+    const readonly = this.editable(path) === undefined || this.readOnly.has(path);
     // A file that turned read-only reads 1 ms newer, so its open editor re-reads it and takes that.
     const nudge = this.readOnly.has(path) ? 1 : 0;
     if (features.fileVersions) {
@@ -525,13 +525,22 @@ export class WorkspaceFiles implements Disposable {
     return { cwd: toHostPath(anyRoot), relativePath: toHostPath(path), folder: undefined };
   }
 
-  /** Writes go only under a workspace folder, never to a folder itself. */
+  /**
+   * Where a path is written, if anywhere: under a workspace folder, or under one
+   * of the environment's known roots, so a file of another project, or of a root
+   * the folders no longer hold, still saves. Browsing and search stay the folders'.
+   */
+  private editable(path: string): Located | undefined {
+    return locate(this.host.roots(), path) ?? locate(this.host.knownRoots(), path);
+  }
+
+  /** Writes go only under an editable root, never to a root itself. */
   private writable(path: string): Located {
-    const folder = locate(this.host.roots(), path);
+    const folder = this.editable(path);
     if (folder === undefined || folder.relativePath === "") {
       throw new FilesError(
         "NoPermissions",
-        `Pult writes only under the workspace folders: ${path}.`,
+        `Pult writes only under the environment's project folders: ${path}.`,
       );
     }
     // The server trims a path's ends: "foo " would be written as "foo".
