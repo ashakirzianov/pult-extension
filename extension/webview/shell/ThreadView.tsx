@@ -13,6 +13,7 @@ import { AppAtomRegistryProvider } from "../t3/src/rpc/atomRegistry";
 import { resolveThreadRouteTarget } from "../t3/src/threadRoutes";
 import { makeThreadRouter } from "../src/routes.tsx";
 import { threadViewHost } from "./host.ts";
+import { closeThreadPanel } from "./rightPanel.ts";
 
 /** Keeps the pane on its thread, and hands the shell any other thread the view went to. */
 function followNavigation(router: AnyRouter, home: string, threadId: string) {
@@ -72,6 +73,7 @@ function Landing() {
 /** Renders the thread's turns and composer into `element` until disposed. */
 export function mountThreadView(element: HTMLElement, threadId: string): { dispose(): void } {
   const environmentId = threadViewHost().environmentId();
+  if (environmentId !== null) closeThreadPanel(environmentId, threadId);
   const home = environmentId === null ? "/" : `/${environmentId}/${threadId}`;
   const router = makeThreadRouter({
     root: makeRoot(home, threadId),
