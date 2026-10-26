@@ -83,10 +83,13 @@ class FakeServer implements WorkspaceServer {
     return { entries: children, truncated: false };
   };
 
+  /** How a read of a missing file fails: a stock server says only that the operation did. */
+  missingReadFailure = "path_not_found";
+
   readFile = async ({ cwd, relativePath }: { cwd: string; relativePath: string }) => {
     const path = resolve(cwd, relativePath);
     const file = this.files.get(path);
-    if (file === undefined) throw failure("ProjectReadFileError", "path_not_found");
+    if (file === undefined) throw failure("ProjectReadFileError", this.missingReadFailure);
     if (file.contents.includes("\0")) throw failure("ProjectReadFileError", "binary_file");
     const truncated = file.bytes.length > READ_LIMIT;
     return {
@@ -288,6 +291,13 @@ describe("WorkspaceFiles on a stock server", () => {
     expect(files.isIgnored(`${ROOT}/dist`)).toBe(true);
     expect(decorated).toEqual([`${ROOT}/dist`]);
     expect((await rejection(files.stat(`${ROOT}/src/gone.ts`))).code).toBe("FileNotFound");
+  });
+
+  it("reads a missing file as not found when the server fails the read as an operation", async () => {
+    const { files, server } = setup(STOCK);
+    server.missingReadFailure = "operation_failed";
+    expect((await rejection(files.readFile(`${ROOT}/src/gone.ts`))).code).toBe("FileNotFound");
+    expect(decode(await files.readFile(`${ROOT}/src/a.ts`))).toBe("export const a = 1;\n");
   });
 
   it("refuses to create, move or delete entries", async () => {

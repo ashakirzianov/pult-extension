@@ -268,8 +268,11 @@ export class WorkspaceFiles implements Disposable {
     try {
       result = await this.server.readFile({ cwd: target.cwd, relativePath: target.relativePath });
     } catch (error) {
-      if (field(error, "failure") !== "binary_file") throw toFilesError(error, path);
-      return this.readBinary(path, target);
+      const failure = field(error, "failure");
+      if (failure === "binary_file") return this.readBinary(path, target);
+      // A stock server fails the read of a missing file as an operation; a stat tells that from the rest.
+      if (failure === "operation_failed" && !(await this.exists(path))) throw new FilesError("FileNotFound", path);
+      throw toFilesError(error, path);
     }
     const bytes = utf8.encode(result.contents);
     const reason = readOnlyReason(result, bytes.length);
