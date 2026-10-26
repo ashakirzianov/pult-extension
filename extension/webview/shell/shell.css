@@ -34,3 +34,9 @@ html:not([data-theme-id]) .pult-thread-view {
   min-height: 0;
   height: 100%;
 }
+
+/* The thread's tab carries the view's header, project icon, project and
+   title (the shell's `src/threads/pane.tsx`), so the view shows none. */
+.pult-thread-view [data-chat-header] {
+  display: none;
+}

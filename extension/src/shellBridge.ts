@@ -30,6 +30,7 @@ export function shellBridge(connection: WindowConnection, model: ThreadsModel): 
         projectId: thread.projectId,
         projectName: model.project(thread.projectId)?.title ?? thread.projectId,
         projectRoot: model.project(thread.projectId)?.workspaceRoot ?? null,
+        projectIcon: model.project(thread.projectId)?.projectIcon ?? null,
         title: thread.title,
         branch: thread.branch,
         createdAt: thread.createdAt,
