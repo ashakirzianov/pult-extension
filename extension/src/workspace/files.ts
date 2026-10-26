@@ -241,8 +241,10 @@ export class WorkspaceFiles implements Disposable {
       };
     }
     const mtime = this.mtimes.get(path) ?? this.epoch;
+    // A known root is a directory before it is a folder: the workbench stats a folder before adding it.
+    const located = target.folder ?? locate(this.host.knownRoots(), path);
     return {
-      kind: await this.listedKind(path, target.folder),
+      kind: await this.listedKind(path, located),
       symlink: false,
       ctime: this.epoch,
       mtime: mtime + nudge,
@@ -597,7 +599,7 @@ export class WorkspaceFiles implements Disposable {
     return reported;
   }
 
-  /** A stock server's stat: a file outside the folders is taken for a file until a read says otherwise. */
+  /** A stock server's stat: a path outside the folders and the known roots is taken for a file until a read says otherwise. */
   private async listedKind(
     path: string,
     folder: Located | undefined,

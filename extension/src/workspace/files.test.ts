@@ -293,6 +293,15 @@ describe("WorkspaceFiles on a stock server", () => {
     expect((await rejection(files.stat(`${ROOT}/src/gone.ts`))).code).toBe("FileNotFound");
   });
 
+  it("stats a known root and what is under it before the root is a folder", async () => {
+    const { files, server } = setup(STOCK);
+    server.directories.add(`${OTHER_PROJECT}/lib`);
+    server.put(`${OTHER_PROJECT}/lib/x.ts`, "x");
+    expect((await files.stat(OTHER_PROJECT)).kind).toBe("directory");
+    expect((await files.stat(`${OTHER_PROJECT}/lib`)).kind).toBe("directory");
+    expect((await files.stat(`${OTHER_PROJECT}/lib/x.ts`)).kind).toBe("file");
+  });
+
   it("reads a missing file as not found when the server fails the read as an operation", async () => {
     const { files, server } = setup(STOCK);
     server.missingReadFailure = "operation_failed";
