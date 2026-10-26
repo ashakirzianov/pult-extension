@@ -2,6 +2,9 @@
 // on the shell's connection. A navigation to another thread opens it in the
 // shell; drafts and upstream's own pages are not part of a thread pane yet.
 import { type AnyRouter, Outlet, RouterProvider, useRouter } from "@tanstack/react-router";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { deriveProviderSubagentStatus } from "@t3tools/client-runtime/state/thread-execution";
+import { EnvironmentId, isOrchestrationV2WorkActive, ThreadId } from "@t3tools/contracts";
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -10,6 +13,7 @@ import { CustomSnoozeDialogHost } from "../t3/src/components/CustomSnoozeDialog"
 import { SidebarProvider } from "../t3/src/components/ui/sidebar";
 import { AnchoredToastProvider, ToastProvider, toastManager } from "../t3/src/components/ui/toast";
 import { AppAtomRegistryProvider } from "../t3/src/rpc/atomRegistry";
+import { useThreadProjection } from "../t3/src/state/entities";
 import { resolveThreadRouteTarget } from "../t3/src/threadRoutes";
 import { makeThreadRouter } from "../src/routes.tsx";
 import { threadViewHost } from "./host.ts";
@@ -37,7 +41,28 @@ function followNavigation(router: AnyRouter, home: string, threadId: string) {
   void router.navigate({ to: home, replace: true });
 }
 
-function makeRoot(home: string, threadId: string) {
+/**
+ * Reports the activity the mounted thread's projection knows to the shell:
+ * each subagent of its roster that has a thread, and the thread itself when
+ * it is a provider's native subagent, whose work is a runless turn the
+ * thread list cannot see. Live, on the subscription the view holds anyway.
+ */
+function ActivityReporter({ environmentId, threadId }: { environmentId: string; threadId: string }) {
+  const projection =
+    useThreadProjection(scopeThreadRef(EnvironmentId.make(environmentId), ThreadId.make(threadId)))?.projection ?? null;
+  useEffect(() => {
+    if (projection === null) return;
+    const activity = projection.subagents.flatMap((subagent) =>
+      subagent.childThreadId === null ? [] : [{ threadId: subagent.childThreadId, working: isOrchestrationV2WorkActive(subagent.status) }],
+    );
+    const own = deriveProviderSubagentStatus(projection);
+    if (own !== null) activity.push({ threadId: ThreadId.make(threadId), working: isOrchestrationV2WorkActive(own.status) });
+    threadViewHost().reportActivity(activity);
+  }, [projection, threadId]);
+  return null;
+}
+
+function makeRoot(home: string, environmentId: string | null, threadId: string) {
   function NavigationFollower() {
     const router = useRouter();
     useEffect(
@@ -51,6 +76,7 @@ function makeRoot(home: string, threadId: string) {
       <ToastProvider>
         <AnchoredToastProvider>
           <NavigationFollower />
+          {environmentId === null ? null : <ActivityReporter environmentId={environmentId} threadId={threadId} />}
           <ConfirmDialogHost />
           <CustomSnoozeDialogHost />
           <SidebarProvider defaultOpen={false}>
@@ -78,7 +104,7 @@ export function mountThreadView(element: HTMLElement, threadId: string): { dispo
   const home =
     environmentId === null ? "/" : `/${encodeURIComponent(environmentId)}/${encodeURIComponent(threadId)}`;
   const router = makeThreadRouter({
-    root: makeRoot(home, threadId),
+    root: makeRoot(home, environmentId, threadId),
     landing: Landing,
     initialPath: home,
   });

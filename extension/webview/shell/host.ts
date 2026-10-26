@@ -9,8 +9,9 @@ import type { ShellConnectionServices } from "./connectionRuntime.ts";
  * view navigates to opens, and where what the view would show in its right
  * panel goes instead (`rightPanel.ts`): a file, as a path relative to the
  * thread's project root or an absolute host path, with a line to reveal;
- * the thread's changes, with a file's path when one was named. The shell's
- * side is its `src/threads/pane.tsx`.
+ * the thread's changes, with a file's path when one was named; and what the
+ * view knows of its lineage's activity. The shell's side is its
+ * `src/threads/pane.tsx`.
  */
 export interface ThreadViewHost {
   readonly connection: () => Promise<Context.Context<ShellConnectionServices>>;
@@ -18,6 +19,12 @@ export interface ThreadViewHost {
   readonly openThread: (threadId: string) => void;
   readonly openFile: (threadId: string, path: string, line: number | null) => void;
   readonly openChanges: (threadId: string, path: string | null) => void;
+  /**
+   * Whether threads of the mounted thread's lineage are working, as its
+   * projection knows them: its subagents' from its roster, its own when it is
+   * a provider's native subagent, whose work has no run the thread list sees.
+   */
+  readonly reportActivity: (activity: ReadonlyArray<{ readonly threadId: string; readonly working: boolean }>) => void;
 }
 
 let current: ThreadViewHost | undefined;
