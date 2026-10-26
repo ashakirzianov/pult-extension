@@ -12,7 +12,10 @@ import { shelve, threadStatus, type ShelfName } from "./threads/presentation.ts"
  * it. Only in the shell: elsewhere the command does not exist and nothing is
  * sent. The shell's command and payload shape are its `src/threads/store.ts`.
  * The threads go shelved as upstream's sidebar lists them (`shelve`): pinned,
- * active, snoozed, settled, each in its shelf's order, and nothing unlisted.
+ * active, snoozed, settled, each in its shelf's order; then the subagents,
+ * which upstream lists in their parent and the shell under the parent's card,
+ * on no shelf, with their parent and root. Archived and deleted ones go
+ * nowhere.
  */
 export function shellBridge(connection: WindowConnection, model: ThreadsModel): vscode.Disposable {
   if (vscode.env.appName !== "Pult") return { dispose: () => {} };
@@ -27,6 +30,8 @@ export function shellBridge(connection: WindowConnection, model: ThreadsModel): 
       threads: shelvedThreads(model, now).map(([thread, shelf]) => ({
         id: thread.id,
         shelf,
+        parentId: thread.lineage.parentThreadId,
+        rootId: thread.lineage.rootThreadId,
         projectId: thread.projectId,
         projectName: model.project(thread.projectId)?.title ?? thread.projectId,
         projectRoot: model.project(thread.projectId)?.workspaceRoot ?? null,
@@ -58,8 +63,18 @@ export function shellBridge(connection: WindowConnection, model: ThreadsModel): 
   return vscode.Disposable.from(model.onDidChange(push), connection.onDidChange(push));
 }
 
-function shelvedThreads(model: ThreadsModel, now: string): Array<[EnvironmentThreadShell, ShelfName]> {
-  const shelves = shelve(model.threads(), now, model.features);
+function shelvedThreads(model: ThreadsModel, now: string): Array<[EnvironmentThreadShell, ShelfName | null]> {
+  const threads = model.threads();
+  const shelves = shelve(threads, now, model.features);
   const names: ReadonlyArray<ShelfName> = ["pinned", "active", "snoozed", "settled"];
-  return names.flatMap((shelf) => shelves[shelf].map((thread): [EnvironmentThreadShell, ShelfName] => [thread, shelf]));
+  const subagents = threads.filter(
+    (thread) =>
+      thread.lineage.relationshipToParent === "subagent" &&
+      thread.archivedAt === null &&
+      thread.deletedAt === null,
+  );
+  return [
+    ...names.flatMap((shelf) => shelves[shelf].map((thread): [EnvironmentThreadShell, ShelfName] => [thread, shelf])),
+    ...subagents.map((thread): [EnvironmentThreadShell, null] => [thread, null]),
+  ];
 }
