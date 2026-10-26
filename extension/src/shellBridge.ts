@@ -1,8 +1,9 @@
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import * as vscode from "vscode";
 
 import type { WindowConnection } from "./connection/service.ts";
 import type { ThreadsModel } from "./threads/model.ts";
-import { threadStatus } from "./threads/presentation.ts";
+import { shelve, threadStatus, type ShelfName } from "./threads/presentation.ts";
 
 /**
  * The spike's bridge to Pult's own shell (`pult` repo, branch `shell`): the
@@ -10,6 +11,8 @@ import { threadStatus } from "./threads/presentation.ts";
  * the extension API, so a thread pane the shell renders in-process can show
  * it. Only in the shell: elsewhere the command does not exist and nothing is
  * sent. The shell's command and payload shape are its `src/threads/store.ts`.
+ * The threads go shelved as upstream's sidebar lists them (`shelve`): pinned,
+ * active, snoozed, settled, each in its shelf's order, and nothing unlisted.
  */
 export function shellBridge(connection: WindowConnection, model: ThreadsModel): vscode.Disposable {
   if (vscode.env.appName !== "Pult") return { dispose: () => {} };
@@ -21,8 +24,9 @@ export function shellBridge(connection: WindowConnection, model: ThreadsModel): 
         environment === null
           ? null
           : { id: environment.environmentId, label: environment.label, phase: environment.phase },
-      threads: model.threads().map((thread) => ({
+      threads: shelvedThreads(model, now).map(([thread, shelf]) => ({
         id: thread.id,
+        shelf,
         projectId: thread.projectId,
         projectName: model.project(thread.projectId)?.title ?? thread.projectId,
         projectRoot: model.project(thread.projectId)?.workspaceRoot ?? null,
@@ -32,8 +36,6 @@ export function shellBridge(connection: WindowConnection, model: ThreadsModel): 
         updatedAt: thread.updatedAt,
         working: threadStatus(thread, now)?.badge === "R",
         pinned: thread.pinnedAt !== null,
-        settled: thread.settledOverride === "settled",
-        snoozed: thread.snoozedUntil !== null,
         latestRun:
           thread.latestRun === null
             ? null
@@ -53,4 +55,10 @@ export function shellBridge(connection: WindowConnection, model: ThreadsModel): 
   };
   push();
   return vscode.Disposable.from(model.onDidChange(push), connection.onDidChange(push));
+}
+
+function shelvedThreads(model: ThreadsModel, now: string): Array<[EnvironmentThreadShell, ShelfName]> {
+  const shelves = shelve(model.threads(), now, model.features);
+  const names: ReadonlyArray<ShelfName> = ["pinned", "active", "snoozed", "settled"];
+  return names.flatMap((shelf) => shelves[shelf].map((thread): [EnvironmentThreadShell, ShelfName] => [thread, shelf]));
 }
