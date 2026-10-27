@@ -164,6 +164,46 @@ html:not([data-theme-id]) .pult-thread-view {
   margin-inline-start: auto;
 }
 
+/* Send at the end of the message, as while the composer rests: the footer
+   shares the message's row, and the composer is as tall as the message and
+   its padding, one line as tall as the resting composer (3rem), send centred
+   on the message's last line. Resting, upstream places the footer itself
+   (absolute, out of the grid), so these hold only while it is in flow. The
+   message's line is the editor's: leading-relaxed on the prompt's size. */
+.pult-thread-view [data-chat-composer-surface="true"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.pult-thread-view [data-chat-composer-surface="true"] > * {
+  grid-column: 1 / -1;
+}
+
+.pult-thread-view
+  [data-chat-composer-surface="true"]:has(> [data-chat-composer-footer="true"]:not(.absolute))
+  > [data-chat-composer-body="true"] {
+  grid-row: 1;
+  grid-column: 1;
+  padding-inline-end: 0;
+  padding-block: calc((3rem - 1.625 * var(--font-size-prompt, var(--text-sm))) / 2);
+}
+
+.pult-thread-view
+  [data-chat-composer-surface="true"]:has(> [data-chat-composer-footer="true"]:not(.absolute))
+  > [data-chat-composer-body="true"]
+  .composer-tiptap {
+  min-height: 0;
+}
+
+.pult-thread-view
+  [data-chat-composer-surface="true"]
+  > [data-chat-composer-footer="true"]:not(.absolute) {
+  grid-row: 1;
+  grid-column: 2;
+  align-self: end;
+  padding-block: 0 0.5rem;
+}
+
 /* The composer and its send button: rounded rectangles of one radius. */
 .pult-thread-view [data-slot="composer-shell"]::before,
 .pult-thread-view [data-slot="composer-host"],
