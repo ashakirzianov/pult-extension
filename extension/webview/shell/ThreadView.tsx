@@ -144,7 +144,11 @@ function followNavigation(router: AnyRouter, mount: Mount) {
     const session = useComposerDraftStore.getState().getDraftSession(shown.draftId);
     if (session !== null && environmentId !== null) {
       localStorage.setItem(draftKey(environmentId, session.projectId), shown.draftId);
-      if (target.kind === "draft" && session.projectId === target.projectId) return;
+      if (target.kind === "draft" && session.projectId === target.projectId) {
+        // The draft's details panel stays closed too, keyed by the thread id the draft holds.
+        closeThreadPanel(environmentId, session.threadId);
+        return;
+      }
       threadViewHost().openDraft(session.projectId);
     }
     goHome();
