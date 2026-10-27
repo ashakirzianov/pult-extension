@@ -14,7 +14,7 @@ This repo is **Pult's VS Code extension**, step 1 of RFC 1, and a repo of the **
 
 ## Review posture
 
-**High-level.** Anton reviews direction, interfaces and module boundaries (the RFCs, `pult/decisions`, the seams with the server and the vendored packages), not implementation. Agents commit on their own and surface design deltas introduced during implementation rather than landing them silently. **Never push unless asked:** pushing is Anton's call while the GitHub repo is not created.
+**High-level.** Anton reviews direction, interfaces and module boundaries (the RFCs, `pult/decisions`, the seams with the server and the vendored packages), not implementation. Agents commit on their own and surface design deltas introduced during implementation rather than landing them silently. **Agents push on their own** (`axis/decisions`, `push-gate`).
 
 ## Glossary
 
