@@ -199,7 +199,12 @@ function activeThread(model: ThreadsModel): EnvironmentThreadShell | undefined {
     : undefined;
 }
 
-/** Opens a draft tab in a project: the one given, or one the user picks, the active thread's first. */
+/**
+ * Opens a draft in a project: the one given, or one the user picks, the
+ * current thread's first. In Pult's shell the draft is the shell's
+ * (`pult-shell.newThread`), its current thread the shell's selection; in
+ * VS Code a draft tab, its current thread the active tab's.
+ */
 async function newThread(model: ThreadsModel, projectId: string | undefined) {
   const environmentId = model.environmentId;
   if (environmentId === null) {
@@ -208,7 +213,13 @@ async function newThread(model: ThreadsModel, projectId: string | undefined) {
   }
   let chosen = projectId;
   if (chosen === undefined) {
-    const current = activeThread(model)?.projectId;
+    const current = IN_PULT_SHELL
+      ? await vscode.commands.executeCommand("pult-shell.selectedThread").then(
+          (threadId) =>
+            typeof threadId === "string" ? model.thread(threadId)?.projectId : undefined,
+          () => undefined,
+        )
+      : activeThread(model)?.projectId;
     const projects = model
       .projects()
       .toSorted(
@@ -235,6 +246,10 @@ async function newThread(model: ThreadsModel, projectId: string | undefined) {
           )?.projectId;
   }
   if (chosen === undefined) return;
+  if (IN_PULT_SHELL) {
+    await vscode.commands.executeCommand("pult-shell.newThread", chosen);
+    return;
+  }
   await openThreadTab(
     { kind: "draft", draftId: crypto.randomUUID(), projectId: chosen },
     environmentId,
