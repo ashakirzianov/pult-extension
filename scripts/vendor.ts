@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Vendors the protocol packages from T3 Code Extensible at the commit pinned in
-// vendor/t3code/PIN, Pult's pin: packages/{contracts,client-runtime,shared} land
-// verbatim in vendor/t3code/packages/, and vendor/t3code/COMMIT records the full
-// hash. pnpm-workspace.yaml takes the fork's `catalog:` block whole, and its
+// vendor/t3code/PIN, Pult's pin: packages/{contracts,client-runtime,shared},
+// with the workspace packages client-runtime depends on (source-control-*,
+// provider-core), land verbatim in vendor/t3code/packages/, and
+// vendor/t3code/COMMIT records the full hash. pnpm-workspace.yaml takes the
+// fork's `catalog:` block whole, and its
 // `overrides:`, `packageExtensions:` and `patchedDependencies:` blocks kept to
 // the packages pnpm-lock.yaml installs, the patches vendored in
 // vendor/t3code/patches/. A bump that brings in a package one of them names
@@ -29,7 +31,23 @@ import * as YAML from "yaml";
 
 import { t3codeCheckoutPath } from "./checkout.ts";
 
-const VENDORED_PACKAGES = ["contracts", "client-runtime", "shared"] as const;
+const VENDORED_PACKAGES = [
+  "contracts",
+  "client-runtime",
+  "shared",
+  // client-runtime's workspace dependencies, with theirs, dev ones included,
+  // since pnpm installs a workspace package's devDependencies too.
+  "source-control-core",
+  "source-control-definitions",
+  "source-control-azure-devops",
+  "source-control-bitbucket",
+  "source-control-forgejo",
+  "source-control-gitcafe",
+  "source-control-github",
+  "source-control-gitlab",
+  "source-control-testing",
+  "provider-core",
+] as const;
 const VENDOR_DIR = "vendor/t3code";
 // Every vendored file sits under one of these, on both sides.
 const VENDORED_DIRS = ["packages", "patches"] as const;
