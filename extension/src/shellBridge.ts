@@ -1,4 +1,5 @@
 import { type EnvironmentThreadShell, resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
+import { canSnooze } from "@t3tools/client-runtime/state/thread-settled";
 import * as vscode from "vscode";
 
 import type { WindowConnection } from "./connection/service.ts";
@@ -27,6 +28,8 @@ export function shellBridge(connection: WindowConnection, model: ThreadsModel): 
         environment === null
           ? null
           : { id: environment.environmentId, label: environment.label, phase: environment.phase },
+      // What the server lets the shell do to a thread: settle, snooze, pin.
+      features: model.features,
       threads: shelvedThreads(model, now).map(([thread, shelf]) => ({
         id: thread.id,
         shelf,
@@ -45,6 +48,8 @@ export function shellBridge(connection: WindowConnection, model: ThreadsModel): 
         waiting: thread.runtime?.status === "idle",
         workingSince: resolveThreadWorkingStartedAt(thread),
         pinned: thread.pinnedAt !== null,
+        // No pending approval or input and no queued turn start, as of this push.
+        canSnooze: canSnooze(thread, { now }),
         latestRun:
           thread.latestRun === null
             ? null
