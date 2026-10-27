@@ -265,3 +265,13 @@ html:not([data-theme-id]) .pult-thread-view {
 .pult-thread-view [data-chat-composer-stack="true"] > * > [aria-hidden]:last-child {
   height: 8px;
 }
+
+/* The agent's side of the thread is as wide as the message typed in the
+   composer below it: every lane but a user message's is inset by what the
+   composer has around its message (its 1px edge, its padding, and on the
+   end its send button), less the lane's own px-1. A user message keeps the
+   whole lane, its end at the composer's. */
+.pult-thread-view .chat-content-lane:not(:has(> [data-message-role="user"])),
+.pult-thread-view [data-chat-thread-status-line="true"] {
+  padding-inline: calc(1px + 0.75rem) calc(1px + 3.75rem);
+}
