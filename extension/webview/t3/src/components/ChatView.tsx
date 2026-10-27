@@ -148,6 +148,7 @@ import {
   type SetStateAction,
   Suspense,
   useCallback,
+  useContext,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -422,7 +423,12 @@ import {
   waitForThreadShell,
 } from "../state/entities";
 import { environmentShell } from "../state/shell";
-import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
+import {
+  ChatComposer,
+  type ChatComposerHandle,
+  ComposerControlsSlot,
+  ComposerControlsSlotItem,
+} from "./chat/ChatComposer";
 import { createPageScrollController, type PageScrollKey } from "./chat/pageScrollController";
 import { isTimelineScrollTarget } from "./chat/timelineScrollTarget";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
@@ -4223,8 +4229,13 @@ export default function ChatView(props: ChatViewProps) {
     showEnvironmentIndicator: showComposerEnvironmentIndicator,
     hostsRestingComposerControls: routeKind === "server" && restingComposerControlsVisible,
   });
+  // Pult: with a slot for the composer's controls, the strips below the composer stay empty.
+  const composerControlsSlot = useContext(ComposerControlsSlot);
   const mountComposerModelStrip =
-    routeKind === "server" && !mountComposerContextStrip && !showProviderSubagentBar;
+    routeKind === "server" &&
+    !mountComposerContextStrip &&
+    !showProviderSubagentBar &&
+    composerControlsSlot === null;
   const showComposerModelStrip = mountComposerModelStrip && restingComposerControlsVisible;
   const terminalShortcutLabelOptions = useMemo(
     () => ({
@@ -11235,7 +11246,10 @@ export default function ChatView(props: ChatViewProps) {
                     }
                   >
                     <ComposerSurface.Shell
-                      contextStrip={showComposerContextStrip || showComposerModelStrip}
+                      contextStrip={
+                        composerControlsSlot === null &&
+                        (showComposerContextStrip || showComposerModelStrip)
+                      }
                     >
                       <ComposerSurface.Host
                         inert={isSavingQueuedEdit}
@@ -11463,6 +11477,7 @@ export default function ChatView(props: ChatViewProps) {
                             </ComposerSurface.ContextStrip>
                           ) : null}
                           {mountComposerContextStrip && (
+                            <ComposerControlsSlotItem item="context">
                             <div className="pointer-events-auto">
                               <BranchToolbar
                                 forceNewWorktree={multipleModelSelections !== null}
@@ -11502,6 +11517,7 @@ export default function ChatView(props: ChatViewProps) {
                                 contextStripVisible={showComposerContextStrip}
                               />
                             </div>
+                            </ComposerControlsSlotItem>
                           )}
                         </div>
                       </div>

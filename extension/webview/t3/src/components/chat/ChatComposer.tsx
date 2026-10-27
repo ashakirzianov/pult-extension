@@ -56,10 +56,12 @@ import { folderDropTarget, resolveDroppedFolderPath } from "./folderDrop";
 import { createModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
 import { USAGE_LIMITS_COMMAND } from "@t3tools/shared/usageLimits";
 import {
+  createContext,
   memo,
   type ComponentProps,
   type ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useImperativeHandle,
@@ -1346,6 +1348,29 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
   );
 });
 
+/**
+ * Pult: where the composer's settings render instead of its footer, a bar the
+ * app around the view provides. Each item goes there in a wrapper naming it
+ * (`data-chat-composer-slot-item`), which the bar orders; without a slot the
+ * composer is upstream's.
+ */
+export const ComposerControlsSlot = createContext<HTMLElement | null>(null);
+
+export function ComposerControlsSlotItem(props: { item: string; children: ReactNode }) {
+  const slot = useContext(ComposerControlsSlot);
+  if (slot === null) return props.children;
+  return createPortal(
+    <div
+      data-chat-composer-slot-item={props.item}
+      data-chat-composer-resting-controls="true"
+      className="flex min-w-0 items-center gap-1"
+    >
+      {props.children}
+    </div>,
+    slot,
+  );
+}
+
 const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(props: {
   compact: boolean;
   activeContextWindow: ContextWindowSnapshot | null;
@@ -1384,6 +1409,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
 }) {
   return (
     <>
+      <ComposerControlsSlotItem item="meter">
       {props.activeContextWindow ? (
         <ContextWindowMeter
           usage={props.activeContextWindow}
@@ -1395,6 +1421,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
       ) : props.reserveContextWindowMeter ? (
         <ContextWindowMeterPlaceholder />
       ) : null}
+      </ComposerControlsSlotItem>
       <ComposerPrimaryActions
         compact={props.compact}
         pendingAction={props.pendingAction}
@@ -5129,7 +5156,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ? standaloneComposerImages.filter((image) => pendingSnapShotIdSet.has(image.id))
     : standaloneComposerImages;
   // Keep collapsed controls inside the input when workspace context is hidden.
-  const composerControlsCollapsed = isComposerResting || isComposerCollapsedMobile;
+  const composerCollapsed = isComposerResting || isComposerCollapsedMobile;
+  // Pult: controls in the app's slot keep their expanded form while the composer rests.
+  const controlsSlot = useContext(ComposerControlsSlot);
+  const composerControlsCollapsed = composerCollapsed && controlsSlot === null;
   const showInlineRestingControls = composerControlsCollapsed && restingControlsHost === null;
   const composerControlsVisibleInStrip =
     composerControlsCollapsed && restingControlsHost !== null && restingControlsVisible;
@@ -5216,7 +5246,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   const composerMainSurfaceRef = useComposerRestingTransition(
-    composerControlsCollapsed,
+    composerCollapsed,
     isComposerResting,
     restingComposerControlsRef,
     onComposerOverlayHeightChange,
@@ -6553,7 +6583,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       }}
       onFocusCapture={(event) => {
         const activeElement = event.target;
-        if (composerControlsCollapsed && isInsideRestingComposerControlScope(activeElement)) {
+        if (composerCollapsed && isInsideRestingComposerControlScope(activeElement)) {
           return;
         }
         if (isInsideCollapsedComposerControls(activeElement)) {
@@ -7453,17 +7483,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     (showInlineRestingControls ? "bottom-[calc(2rem+1px)]" : "bottom-px"),
                 )}
               >
+                <ComposerControlsSlotItem item="controls">
                 <div
                   ref={expandedControlsLayout.attachControls}
                   data-chat-composer-controls="left"
                   data-chat-composer-footer-controls="true"
                   className={cn(
                     "relative -m-1 -ms-3.5 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 ps-3.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-                    isComposerResting && "hidden",
+                    isComposerResting && controlsSlot === null && "hidden",
                   )}
                 >
                   {composerControlsCollapsed ? null : composerControls}
                 </div>
+                </ComposerControlsSlotItem>
 
                 {/* Right side: send / stop button */}
                 <div
@@ -7474,6 +7506,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   }
                   className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
                 >
+                  <ComposerControlsSlotItem item="attach">
                   {showComposerAttachAction ? (
                     <>
                       <input
@@ -7511,6 +7544,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       </Tooltip>
                     </>
                   ) : null}
+                  </ComposerControlsSlotItem>
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
                     activeContextWindow={
