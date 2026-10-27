@@ -7,6 +7,7 @@ import {
   request,
 } from "@t3tools/client-runtime/rpc";
 import {
+  type ClientGuardedRpcTag,
   type EnvironmentAuthorizationError,
   type ProjectWatchEntriesError,
   type ProjectWatchEntriesEvent,
@@ -43,7 +44,7 @@ export function connectionServer(
   stock: () => boolean,
 ): WorkspaceServer {
   const ready = () => whenReady(connection, binding);
-  const call = async <Tag extends EnvironmentUnaryRpcTag>(
+  const call = async <Tag extends Exclude<EnvironmentUnaryRpcTag, ClientGuardedRpcTag>>(
     tag: Tag,
     input: EnvironmentRpcInput<Tag>,
   ) => {

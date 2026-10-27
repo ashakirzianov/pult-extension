@@ -2,7 +2,6 @@ import { ClientCapabilities } from "@t3tools/client-runtime/platform";
 import {
   AuthAccessTokenResult,
   AuthAccessTokenType,
-  AuthStandardClientScopes,
   AuthWebSocketTicketResult,
   EnvironmentAuthInvalidError,
   EnvironmentId,
@@ -128,7 +127,6 @@ async function run(
           FetchHttpClient.layer,
           Layer.succeed(ClientCapabilities.ClientPresentation, {
             metadata: { label: "Pult for VS Code" },
-            scopes: AuthStandardClientScopes,
           }),
         ),
       ),

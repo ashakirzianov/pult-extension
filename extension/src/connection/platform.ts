@@ -7,7 +7,6 @@ import {
 } from "@t3tools/client-runtime/connection";
 import { ClientCapabilities, PlatformConnectionSource } from "@t3tools/client-runtime/platform";
 import { ManagedRelay } from "@t3tools/client-runtime/relay";
-import { AuthStandardClientScopes } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
@@ -60,7 +59,6 @@ const wakeupsLayer = Wakeups.layer({
 const capabilitiesLayer = Layer.mergeAll(
   Layer.succeed(ClientCapabilities.ClientPresentation, {
     metadata: { label: "Pult for VS Code", deviceType: "desktop" },
-    scopes: AuthStandardClientScopes,
   }),
   Layer.succeed(ClientCapabilities.PrimaryEnvironmentAuth, { bearerToken: Effect.succeedNone }),
   Layer.succeed(ClientCapabilities.CloudSession, {

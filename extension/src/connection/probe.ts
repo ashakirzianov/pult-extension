@@ -79,7 +79,6 @@ export const probe = Effect.fn("pult.probe")(function* (input: ProbeInput) {
       bootstrapRemoteBearerSession({
         httpBaseUrl,
         credential,
-        scopes: presentation.scopes,
         clientMetadata: presentation.metadata,
       }).pipe(
         Effect.flatMap((session) => ticket(session.access_token)),

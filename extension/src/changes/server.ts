@@ -4,6 +4,7 @@ import {
   request,
 } from "@t3tools/client-runtime/rpc";
 import {
+  type ClientGuardedRpcTag,
   type ReviewDiffFileContentsInput,
   type ReviewDiffFileContentsResult,
   type ReviewDiffPreviewInput,
@@ -25,7 +26,7 @@ export interface ChangesServer {
 
 /** The window's connection as the changes view's server, waiting for a connecting window as the workspace's does. */
 export function changesServer(connection: WindowConnection, binding: WindowBinding): ChangesServer {
-  const call = async <Tag extends EnvironmentUnaryRpcTag>(
+  const call = async <Tag extends Exclude<EnvironmentUnaryRpcTag, ClientGuardedRpcTag>>(
     tag: Tag,
     input: EnvironmentRpcInput<Tag>,
   ) => {

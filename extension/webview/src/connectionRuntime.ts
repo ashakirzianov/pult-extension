@@ -36,6 +36,7 @@ const layerRuntime = Layer.mergeAll(
     serviceName: "pult-extension-thread",
     serviceVersion: import.meta.env.APP_VERSION,
     runtime: "browser",
+    serviceInstanceId: ClientTracer.serviceInstanceId,
     client: "web",
   }).pipe(Layer.provide(layerHttpClient)),
   ManagedRelayLayer.layer("http://relay.invalid").pipe(

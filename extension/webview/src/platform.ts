@@ -19,7 +19,7 @@ import {
   PlatformConnectionSource,
 } from "@t3tools/client-runtime/platform";
 import { EnvironmentRpcRequestObserver } from "@t3tools/client-runtime/rpc";
-import { AuthStandardClientScopes, EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -154,7 +154,6 @@ const layerWakeups = Wakeups.layer({
 const layerCapabilities = Layer.mergeAll(
   Layer.succeed(ClientCapabilities.ClientPresentation, {
     metadata: { label: "Pult for VS Code", deviceType: "desktop" },
-    scopes: AuthStandardClientScopes,
   }),
   Layer.succeed(ClientCapabilities.PrimaryEnvironmentAuth, { bearerToken: Effect.succeedNone }),
   Layer.succeed(ClientCapabilities.CloudSession, {
