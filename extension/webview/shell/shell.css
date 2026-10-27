@@ -120,14 +120,14 @@ html:not([data-theme-id]) .pult-thread-view {
 
 /* The bar's measures, shared with the composer and the timeline: the
    message's text inset by upstream's padding inside the box's 1px edge,
-   and the bar's first entry, the model picker, with its icon there too. */
+   and the bar's entries from the box's left edge to its right. */
 .pult-thread-view {
   --pult-bar-height: 40px;
   --pult-bar-item-padding: 6px;
   --pult-bar-gap: 2px;
   --pult-bar-button-size: 26px;
   --pult-composer-text-inset: calc(1px + 1rem);
-  --pult-bar-start: calc(var(--pult-composer-text-inset) - var(--pult-bar-item-padding));
+  --pult-bar-start: 0px;
 }
 
 .pult-thread-view .pult-composer-bar {
