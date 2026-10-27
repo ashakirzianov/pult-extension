@@ -116,7 +116,7 @@ import {
 import { ComposerActivityRow } from "./ComposerActivityStatus";
 import {
   ComposerBarActivity,
-  ComposerBarFormButtons,
+  ComposerBarHost,
   ComposerBarNotices,
 } from "../../../../shell/ComposerBar";
 import {
@@ -3911,7 +3911,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 </ComposerControlsSlotItem>
 
                 <ComposerControlsSlotItem item="actions">
-                <ComposerBarFormButtons form={composerFormRef}>
                 <div
                   ref={setRestingActionsElement}
                   data-chat-composer-actions="right"
@@ -3984,7 +3983,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       : {})}
                   />
                 </div>
-                </ComposerBarFormButtons>
                 </ComposerControlsSlotItem>
               </div>
             )}
@@ -4012,6 +4010,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           </div>
         </ComposerSurface.Main>
       </div>
+      {controlsSlot === null ? null : (
+        <ComposerBarHost slot={controlsSlot} draft={routeKind === "draft"} />
+      )}
     </form>
   );
 });

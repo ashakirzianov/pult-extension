@@ -1682,14 +1682,6 @@ export default function ChatView(props: ChatViewProps) {
   });
   // Pult: with a slot for the composer's controls, the strips below the composer stay empty.
   const composerControlsSlot = use(ComposerControlsSlot);
-  // Pult: a draft's controls render under its composer instead, in a slot of the view's own.
-  const [draftComposerControlsSlot, setDraftComposerControlsSlot] = useState<HTMLElement | null>(
-    null,
-  );
-  const draftHostsComposerControls = composerControlsSlot !== null && routeKind === "draft";
-  const shownComposerControlsSlot = draftHostsComposerControls
-    ? (draftComposerControlsSlot ?? composerControlsSlot)
-    : composerControlsSlot;
   const mountComposerModelStrip =
     routeKind === "server" &&
     !mountComposerContextStrip &&
@@ -3451,7 +3443,6 @@ export default function ChatView(props: ChatViewProps) {
                         : undefined
                     }
                   >
-                    <ComposerControlsSlot value={shownComposerControlsSlot}>
                     <ComposerSurface.Shell
                       contextStrip={
                         composerControlsSlot === null &&
@@ -3729,13 +3720,6 @@ export default function ChatView(props: ChatViewProps) {
                         </div>
                       </div>
                     </ComposerSurface.Shell>
-                    {draftHostsComposerControls ? (
-                      <div
-                        ref={setDraftComposerControlsSlot}
-                        data-chat-composer-draft-controls="true"
-                      />
-                    ) : null}
-                    </ComposerControlsSlot>
                     <div
                       aria-hidden
                       className="h-[calc(env(safe-area-inset-bottom)+1rem)] sm:h-[calc(env(safe-area-inset-bottom)+1.25rem)]"

@@ -15,7 +15,7 @@ import type {
   ComposerTasksProgress,
 } from "../t3/src/components/chat/ComposerTasksBadge";
 import { Popover, PopoverPopup, PopoverTrigger } from "../t3/src/components/ui/popover";
-import { type ReactNode, type RefObject, useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 /** Upstream's stack order: urgent, errors and warnings first, then activity, then the rest. */
 function noticeRank(item: ComposerBannerStackItem) {
@@ -172,46 +172,29 @@ export function ComposerBarActivity({
   );
 }
 
-let composerFormCount = 0;
-
 /**
- * The composer's attach and send buttons, rendered in the bar, out of the
- * composer's form: its submit buttons (send, and in its place a question's
- * answer, Refine, Implement) name the form by its id, so they submit it
- * still. The form gets an id of its own if it has none.
+ * Where the composer bar sits while a composer is mounted: at the end of the
+ * composer's form, under its message, so the buttons in it submit the form
+ * as upstream's do. The bar is the shell's element (`ThreadView.tsx`), moved
+ * here and back to where it was when the composer goes, as for a thread
+ * that mounts none.
  */
-export function ComposerBarFormButtons({
-  form,
-  children,
+export function ComposerBarHost({
+  slot,
+  draft,
 }: {
-  readonly form: RefObject<HTMLFormElement | null>;
-  readonly children: ReactNode;
+  readonly slot: HTMLElement;
+  readonly draft: boolean;
 }) {
-  const element = useRef<HTMLDivElement>(null);
-  // Passive: the form's ref, an ancestor's, is set after this subtree's layout effects.
-  useEffect(() => {
-    const container = element.current;
-    const target = form.current;
-    if (container === null || target === null) return;
-    if (target.id === "") target.id = `pult-composer-form-${(composerFormCount += 1)}`;
-    const link = () => {
-      for (const button of container.querySelectorAll("button[type=submit]")) {
-        if (button.getAttribute("form") !== target.id) button.setAttribute("form", target.id);
-      }
+  const host = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = host.current;
+    if (element === null) return;
+    const home = slot.parentElement;
+    element.append(slot);
+    return () => {
+      if (home !== null && slot.parentElement === element) home.append(slot);
     };
-    link();
-    const observer = new MutationObserver(link);
-    observer.observe(container, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["type"],
-    });
-    return () => observer.disconnect();
-  }, [form]);
-  return (
-    <div ref={element} className="contents">
-      {children}
-    </div>
-  );
+  }, [slot]);
+  return <div ref={host} data-chat-composer-bar-host={draft ? "draft" : "thread"} />;
 }
