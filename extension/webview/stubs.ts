@@ -16,11 +16,14 @@ export const STUBS: Readonly<Record<string, string>> = {
   // The composer's deferred storage, written at once: a hidden tab's page is
   // dropped without the unload that flushes it.
   "src/lib/storage.ts": "src/stubs/storage.ts",
+  // The provider registry without the provider packages, whose servers' SDKs
+  // a webview does not install.
+  "src/components/settings/providerDriverMeta.ts": "src/stubs/providerDriverMeta.ts",
 };
 
 /**
  * The shell's build (`shell/main.tsx`): its own composition root, over the
- * connection the page owns, no 3D models, and no panel toggles at the top
+ * connection the page owns, no 3D models, no provider packages, and no panel toggles at the top
  * right, which are the workbench's business in Pult. The page is one document
  * that unloads as any page does, so upstream's deferred storage stays.
  */
@@ -28,4 +31,5 @@ export const SHELL_STUBS: Readonly<Record<string, string>> = {
   "src/connection/runtime.ts": "shell/connectionRuntime.ts",
   "src/components/device/deviceModels.ts": "src/stubs/deviceModels.ts",
   "src/components/chat/PanelLayoutControls.tsx": "shell/panelLayoutControls.tsx",
+  "src/components/settings/providerDriverMeta.ts": "src/stubs/providerDriverMeta.ts",
 };
