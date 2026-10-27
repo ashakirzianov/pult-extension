@@ -81,3 +81,79 @@ html:not([data-theme-id]) .pult-thread-view {
 .pult-thread-view [data-chat-header] {
   display: none;
 }
+
+/* The pane is the view above its composer bar (`ThreadView.tsx`). */
+.pult-thread-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.pult-thread-view > .pult-thread-main {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+/* The composer bar: the thread's settings, out of the composer, in a strip
+   across the pane's bottom coloured as the workbench's status bar, which
+   the shell hides while a thread's tab is active. The controls keep
+   upstream's look on the bar's colours; their popovers open in the page. */
+.pult-thread-view > .pult-composer-bar {
+  container: composer-surface / inline-size;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 0 12px;
+  overflow: hidden;
+  border-top: 1px solid var(--vscode-statusBar-border, transparent);
+  background: var(--vscode-statusBar-background, var(--background));
+  color: var(--vscode-statusBar-foreground, var(--foreground));
+  --foreground: var(--vscode-statusBar-foreground, currentColor);
+  --muted-foreground: var(--vscode-statusBar-foreground, currentColor);
+  --accent: var(--vscode-statusBarItem-hoverBackground, rgb(255 255 255 / 12%));
+  --accent-foreground: var(--vscode-statusBarItem-hoverForeground, currentColor);
+  /* One text size across the bar, the status bar's 12px. */
+  --text-sm: 12px;
+  --text-xs: 12px;
+  font-size: 12px;
+}
+
+.pult-composer-bar > [data-chat-composer-slot-item]:empty {
+  display: none;
+}
+
+/* Settings first, taking the room they measure their labels against; then
+   a draft's environment and branch, the context window and attachments. */
+.pult-composer-bar > [data-chat-composer-slot-item="controls"] {
+  flex: 1 1 0;
+}
+
+.pult-composer-bar > [data-chat-composer-slot-item="context"] {
+  order: 1;
+}
+
+.pult-composer-bar > [data-chat-composer-slot-item="meter"] {
+  order: 2;
+}
+
+.pult-composer-bar > [data-chat-composer-slot-item="attach"] {
+  order: 3;
+}
+
+/* A draft's environment and branch strip, without its seam under the composer. */
+.pult-composer-bar [data-slot="composer-context-strip"] {
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+
+.pult-composer-bar [data-slot="composer-context-strip"]::before {
+  display: none;
+}
+
+/* With its settings in the bar, the composer's footer holds the send button alone, at its end. */
+.pult-thread-view [data-chat-composer-actions="right"] {
+  margin-inline-start: auto;
+}

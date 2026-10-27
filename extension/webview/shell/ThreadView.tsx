@@ -15,6 +15,7 @@ import { DateTime } from "effect";
 import { type ReactNode, StrictMode, useEffect, useRef, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 
+import { ComposerControlsSlot } from "../t3/src/components/chat/ChatComposer";
 import { ConfirmDialogHost } from "../t3/src/components/ConfirmDialogHost";
 import { CustomSnoozeDialogHost } from "../t3/src/components/CustomSnoozeDialog";
 import { SidebarProvider } from "../t3/src/components/ui/sidebar";
@@ -283,6 +284,12 @@ function makeLanding(mount: Mount) {
   };
 }
 
+/**
+ * Mounts the view above the pane's composer bar: the thread's settings
+ * (model, reasoning, mode, attachments, the context window, a draft's
+ * environment and branch) render there, out of the composer, which keeps
+ * the message and its send button (`ComposerControlsSlot`).
+ */
 function mountView(
   element: HTMLElement,
   target: ViewTarget,
@@ -295,15 +302,28 @@ function mountView(
     initialPath: mount.home(),
   });
   element.classList.add("pult-thread-view");
-  const root = createRoot(element);
+  const main = document.createElement("div");
+  main.className = "pult-thread-main";
+  const bar = document.createElement("div");
+  bar.className = "pult-composer-bar";
+  element.append(main, bar);
+  const root = createRoot(main);
   root.render(
     <StrictMode>
       <AppAtomRegistryProvider>
-        <RouterProvider router={router} />
+        <ComposerControlsSlot value={bar}>
+          <RouterProvider router={router} />
+        </ComposerControlsSlot>
       </AppAtomRegistryProvider>
     </StrictMode>,
   );
-  return { dispose: () => root.unmount() };
+  return {
+    dispose: () => {
+      root.unmount();
+      main.remove();
+      bar.remove();
+    },
+  };
 }
 
 /** Renders the thread's turns and composer into `element` until disposed. */
