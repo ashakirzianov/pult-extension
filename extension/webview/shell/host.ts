@@ -33,15 +33,34 @@ export interface ThreadViewHost {
    * with when the work started, when known.
    */
   readonly reportActivity: (
-    activity: ReadonlyArray<{ readonly threadId: string; readonly working: boolean; readonly workingSince: string | null }>,
+    activity: ReadonlyArray<{
+      readonly threadId: string;
+      readonly working: boolean;
+      readonly workingSince: string | null;
+    }>,
   ) => void;
 }
 
 let current: ThreadViewHost | undefined;
+let resolveStarted: (host: ThreadViewHost) => void = () => {};
+const started = new Promise<ThreadViewHost>((resolve) => {
+  resolveStarted = resolve;
+});
 
 /** Set once, by `startThreadView`, before any view mounts. */
 export function setThreadViewHost(host: ThreadViewHost): void {
   current = host;
+  resolveStarted(host);
+}
+
+/**
+ * The host once the shell has started the view. The view's modules read
+ * state atoms as they load (upstream's theme, applied on import, reads the
+ * environment's themes), which builds the connection runtime before the
+ * shell can start the view; the runtime waits here rather than failing.
+ */
+export function threadViewHostStarted(): Promise<ThreadViewHost> {
+  return started;
 }
 
 export function threadViewHost(): ThreadViewHost {

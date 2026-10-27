@@ -20,7 +20,7 @@ import * as Dpop from "../t3/src/cloud/dpop";
 import type * as Upstream from "../t3/src/connection/runtime";
 import * as BackgroundActivityReporter from "../t3/src/lib/backgroundActivityReporter";
 import { acknowledgeRpcRequest, trackRpcRequestSent } from "../t3/src/rpc/requestLatencyState";
-import { threadViewHost } from "./host.ts";
+import { threadViewHostStarted } from "./host.ts";
 
 let nextObservedRequestId = 0;
 
@@ -59,7 +59,10 @@ const layerApp = BackgroundActivityReporter.layer.pipe(
 /** What the shell's connection runtime must hold: everything upstream's runtime does, less what this file adds. */
 export type ShellConnectionServices = Exclude<UpstreamServices, Layer.Success<typeof layerApp>>;
 
-const layerShell = Layer.effectContext(Effect.promise(() => threadViewHost().connection()));
+// Waits for the shell to start the view: the view's modules build this runtime as they load.
+const layerShell = Layer.effectContext(
+  Effect.promise(() => threadViewHostStarted().then((host) => host.connection())),
+);
 
 export const connectionAtomRuntime: typeof Upstream.connectionAtomRuntime = Atom.runtime(
   layerApp.pipe(Layer.provideMerge(layerShell)),
