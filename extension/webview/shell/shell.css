@@ -139,24 +139,112 @@ html:not([data-theme-id]) .pult-thread-view {
 }
 
 /* Settings first, taking the room they measure their labels against; then
-   a draft's environment and branch, the context window and attachments. */
+   the thread's activity and notices, a draft's environment and branch, the
+   shell's own entries (`data-chat-composer-slot-item="shell"`: the thread's
+   Explorer, branch and environment), the context window and attachments. */
 :is(.pult-composer-bar, [data-chat-composer-draft-controls])
   > [data-chat-composer-slot-item="controls"] {
   flex: 1 1 0;
 }
 
 :is(.pult-composer-bar, [data-chat-composer-draft-controls])
-  > [data-chat-composer-slot-item="context"] {
+  > [data-chat-composer-slot-item="activity"] {
   order: 1;
 }
 
 :is(.pult-composer-bar, [data-chat-composer-draft-controls])
-  > [data-chat-composer-slot-item="meter"] {
+  > [data-chat-composer-slot-item="notices"] {
   order: 2;
+  flex: 0 1 auto;
+}
+
+:is(.pult-composer-bar, [data-chat-composer-draft-controls])
+  > [data-chat-composer-slot-item="context"] {
+  order: 3;
+}
+
+.pult-composer-bar > [data-chat-composer-slot-item="shell"] {
+  order: 4;
+}
+
+:is(.pult-composer-bar, [data-chat-composer-draft-controls])
+  > [data-chat-composer-slot-item="meter"] {
+  order: 5;
 }
 
 .pult-composer-bar > [data-chat-composer-slot-item="attach"] {
-  order: 3;
+  order: 6;
+}
+
+/* A notice in the bar: its icon and title, how many more, then its actions. */
+.pult-bar-notice {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.pult-bar-notice-summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.pult-bar-notice-summary:hover {
+  background: var(--accent);
+}
+
+.pult-bar-notice-icon {
+  display: flex;
+  flex: none;
+}
+
+.pult-bar-notice-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pult-bar-notice[data-variant="warning"] .pult-bar-notice-icon {
+  color: var(--warning);
+}
+
+.pult-bar-notice[data-variant="error"] .pult-bar-notice-icon {
+  color: var(--destructive);
+}
+
+.pult-bar-notice[data-variant="info"] .pult-bar-notice-icon {
+  color: var(--info);
+}
+
+.pult-bar-notice-title {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pult-bar-notice-count {
+  flex: none;
+  color: var(--muted-foreground);
+}
+
+.pult-bar-notice-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.pult-bar-activity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
 }
 
 /* The composer sits on the thread's canvas, not over its turns: the overlay

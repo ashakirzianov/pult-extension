@@ -114,6 +114,7 @@ import {
   type ComposerTasksProgress,
 } from "./ComposerTasksBadge";
 import { ComposerActivityRow } from "./ComposerActivityStatus";
+import { ComposerBarActivity, ComposerBarNotices } from "../../../../shell/ComposerBar";
 import {
   reconcileAttachmentContextReferences,
   useRetainedContextPayloads,
@@ -2318,7 +2319,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     setIsTasksDrawerOpen((open) => !open);
   };
   const toggleTasksDrawerStable = useStableCallback(toggleTasksDrawer);
-  const hasBannerItems = props.bannerItems.length > 0;
+  // Pult: with a slot, the notices, the sync row and the tasks render there, not above the composer.
+  const barHostsNotices = useContext(ComposerControlsSlot) !== null;
+  const hasBannerItems = !barHostsNotices && props.bannerItems.length > 0;
   const hasBlockingComposerTopDrawer =
     activePendingApproval !== null || pendingUserInputs.length > 0;
   const showInlineTasksBadge =
@@ -2326,6 +2329,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activeTaskSteps !== null &&
     !isTasksDrawerOpen &&
     !hasBlockingComposerTopDrawer &&
+    !barHostsNotices &&
     (hasBannerItems || showComposerTopDrawer || isComposerCollapsedMobile);
   const inlineTasksBadge = showInlineTasksBadge ? (
     <ComposerTasksBadge
@@ -2346,7 +2350,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   });
   const composerHasExpandedChrome =
     showComposerTopDrawer ||
-    isTasksDrawerOpen ||
+    (isTasksDrawerOpen && !barHostsNotices) ||
     composerMenuOpen ||
     isStashMenuOpen ||
     isDragOverComposer ||
@@ -2595,6 +2599,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     />
   );
   const showTasksTab =
+    !barHostsNotices &&
     !hasBannerItems &&
     !showComposerTopDrawer &&
     !isTasksDrawerOpen &&
@@ -3489,17 +3494,34 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           <ComposerBannerStack
             key={activeThreadId}
             className="relative z-0"
-            items={bannerStackItems}
+            items={barHostsNotices ? [] : bannerStackItems}
             attachedAbove={props.queuedRunsControl}
           />
-          {!activityStackItem && (shownSyncPhase || inlineTasksBadge) ? (
+          {barHostsNotices ? (
+            <>
+              <ComposerControlsSlotItem item="activity">
+                <ComposerBarActivity
+                  phase={shownSyncPhase}
+                  progress={activeTasksProgress}
+                  steps={activeTaskSteps}
+                  tasksOpen={isTasksDrawerOpen}
+                  onTasksOpenChange={setIsTasksDrawerOpen}
+                />
+              </ComposerControlsSlotItem>
+              <ComposerControlsSlotItem item="notices">
+                <ComposerBarNotices items={props.bannerItems} />
+              </ComposerControlsSlotItem>
+            </>
+          ) : null}
+          {!barHostsNotices && !activityStackItem && (shownSyncPhase || inlineTasksBadge) ? (
             <ComposerBanner.Attachment>
               <ComposerBanner.Root data-chat-composer-activity-strip="true">
                 {shownSyncPhase ? <ComposerActivityRow phase={shownSyncPhase} /> : inlineTasksBadge}
               </ComposerBanner.Root>
             </ComposerBanner.Attachment>
           ) : null}
-          {showComposerTopDrawer && (!isTasksDrawerOpen || hasBlockingComposerTopDrawer) ? (
+          {showComposerTopDrawer &&
+          (!isTasksDrawerOpen || hasBlockingComposerTopDrawer || barHostsNotices) ? (
             <ComposerBanner.Attachment>
               <ComposerBanner.Root
                 data-chat-composer-top-drawer="true"
@@ -3559,7 +3581,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               </ComposerBanner.Root>
             </ComposerBanner.Attachment>
           ) : null}
-          {!activityStackItem &&
+          {!barHostsNotices &&
+          !activityStackItem &&
           isTasksDrawerOpen &&
           !hasBlockingComposerTopDrawer &&
           activeTasksProgress &&

@@ -284,17 +284,24 @@ function makeLanding(mount: Mount) {
   };
 }
 
+/** A mounted view, and its composer bar, which the shell may add entries of its own to. */
+export interface MountedView {
+  dispose(): void;
+  readonly bar: HTMLElement;
+}
+
 /**
  * Mounts the view above the pane's composer bar: the thread's settings
  * (model, reasoning, mode, attachments, the context window, a draft's
- * environment and branch) render there, out of the composer, which keeps
- * the message and its send button (`ComposerControlsSlot`).
+ * environment and branch), its notices and its activity render there, out
+ * of the composer, which keeps the message and its send button
+ * (`ComposerControlsSlot`).
  */
 function mountView(
   element: HTMLElement,
   target: ViewTarget,
   onPromoted: (threadId: string) => void,
-): { dispose(): void } {
+): MountedView {
   const mount = makeMount(threadViewHost().environmentId(), target, onPromoted);
   const router = makeThreadRouter({
     root: makeRoot(mount),
@@ -318,6 +325,7 @@ function mountView(
     </StrictMode>,
   );
   return {
+    bar,
     dispose: () => {
       root.unmount();
       main.remove();
@@ -327,7 +335,7 @@ function mountView(
 }
 
 /** Renders the thread's turns and composer into `element` until disposed. */
-export function mountThreadView(element: HTMLElement, threadId: string): { dispose(): void } {
+export function mountThreadView(element: HTMLElement, threadId: string): MountedView {
   return mountView(element, { kind: "thread", threadId }, () => {});
 }
 
@@ -341,6 +349,6 @@ export function mountDraftView(
   element: HTMLElement,
   projectId: string,
   onPromoted: (threadId: string) => void,
-): { dispose(): void } {
+): MountedView {
   return mountView(element, { kind: "draft", projectId }, onPromoted);
 }
