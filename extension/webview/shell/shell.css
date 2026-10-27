@@ -95,52 +95,63 @@ html:not([data-theme-id]) .pult-thread-view {
 }
 
 /* The composer bar: the thread's settings, out of the composer, in a strip
-   across the pane's bottom coloured as the workbench's status bar, which
-   the shell hides while a thread's tab is active. The controls keep
-   upstream's look on the bar's colours; their popovers open in the page. */
-.pult-thread-view > .pult-composer-bar {
+   across the pane's bottom on the thread's own canvas, which the shell's
+   status bar gives way to while a thread's tab is active. A draft's
+   settings sit under its composer instead (`data-chat-composer-draft-controls`),
+   in the same row. The controls keep upstream's look; their popovers open
+   in the page. */
+.pult-thread-view > .pult-composer-bar,
+.pult-thread-view [data-chat-composer-draft-controls="true"] {
   container: composer-surface / inline-size;
   display: flex;
-  flex: none;
   align-items: center;
   gap: 4px;
-  height: 40px;
-  padding: 0 12px;
   overflow: hidden;
-  border-top: 1px solid var(--vscode-statusBar-border, transparent);
-  background: var(--vscode-statusBar-background, var(--background));
-  color: var(--vscode-statusBar-foreground, var(--foreground));
-  --foreground: var(--vscode-statusBar-foreground, currentColor);
-  --muted-foreground: var(--vscode-statusBar-foreground, currentColor);
-  --accent: var(--vscode-statusBarItem-hoverBackground, rgb(255 255 255 / 12%));
-  --accent-foreground: var(--vscode-statusBarItem-hoverForeground, currentColor);
-  /* One text size across the bar, the status bar's 12px. */
+  /* One text size across the row, the status bar's 12px. */
   --text-sm: 12px;
   --text-xs: 12px;
   font-size: 12px;
 }
 
-.pult-composer-bar > [data-chat-composer-slot-item]:empty {
+.pult-thread-view > .pult-composer-bar {
+  flex: none;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--background);
+}
+
+.pult-thread-view [data-chat-composer-draft-controls="true"] {
+  pointer-events: auto;
+  height: 36px;
+  margin-top: 4px;
+}
+
+:is(.pult-composer-bar, [data-chat-composer-draft-controls])
+  > [data-chat-composer-slot-item]:empty {
   display: none;
 }
 
 /* No composer, no bar: a thread the view renders read-only (a provider's
-   native subagent) mounts no composer, so nothing fills the bar. */
+   native subagent) mounts no composer, nor does a draft's view, whose
+   settings sit under its composer; so nothing fills the bar. */
 .pult-thread-view > .pult-composer-bar:not(:has(> [data-chat-composer-slot-item]:not(:empty))) {
   display: none;
 }
 
 /* Settings first, taking the room they measure their labels against; then
    a draft's environment and branch, the context window and attachments. */
-.pult-composer-bar > [data-chat-composer-slot-item="controls"] {
+:is(.pult-composer-bar, [data-chat-composer-draft-controls])
+  > [data-chat-composer-slot-item="controls"] {
   flex: 1 1 0;
 }
 
-.pult-composer-bar > [data-chat-composer-slot-item="context"] {
+:is(.pult-composer-bar, [data-chat-composer-draft-controls])
+  > [data-chat-composer-slot-item="context"] {
   order: 1;
 }
 
-.pult-composer-bar > [data-chat-composer-slot-item="meter"] {
+:is(.pult-composer-bar, [data-chat-composer-draft-controls])
+  > [data-chat-composer-slot-item="meter"] {
   order: 2;
 }
 
@@ -148,14 +159,22 @@ html:not([data-theme-id]) .pult-thread-view {
   order: 3;
 }
 
+/* The composer sits on the thread's canvas, not over its turns: the overlay
+   upstream floats above the timeline is opaque, and the timeline already
+   keeps its last turn clear of it. */
+.pult-thread-view [data-chat-composer-overlay="true"] {
+  background: var(--background);
+}
+
 /* A draft's environment and branch strip, without its seam under the composer. */
-.pult-composer-bar [data-slot="composer-context-strip"] {
+:is(.pult-composer-bar, [data-chat-composer-draft-controls]) [data-slot="composer-context-strip"] {
   width: auto;
   margin: 0;
   padding: 0;
 }
 
-.pult-composer-bar [data-slot="composer-context-strip"]::before {
+:is(.pult-composer-bar, [data-chat-composer-draft-controls])
+  [data-slot="composer-context-strip"]::before {
   display: none;
 }
 
@@ -223,4 +242,20 @@ html:not([data-theme-id]) .pult-thread-view {
 
 .pult-thread-view [data-chat-composer-actions="right"] .rounded-full.rounded-l-none {
   border-radius: 0 8px 8px 0;
+}
+
+/* A draft's composer: three lines tall, its attach button above send. */
+.pult-thread-view
+  [data-chat-composer-stack]:has([data-chat-composer-draft-controls])
+  [data-chat-composer-surface="true"]
+  > [data-chat-composer-body="true"]
+  .composer-tiptap {
+  min-height: calc(3 * 1.625 * var(--font-size-prompt, var(--text-sm)));
+}
+
+.pult-thread-view
+  [data-chat-composer-stack]:has([data-chat-composer-draft-controls])
+  [data-chat-composer-actions="right"] {
+  flex-direction: column;
+  gap: 4px;
 }

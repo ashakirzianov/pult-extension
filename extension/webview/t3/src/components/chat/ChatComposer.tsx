@@ -3892,9 +3892,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   }
                   className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
                 >
-                  <ComposerControlsSlotItem item="attach">
-                  {composerAttachButton}
-                  </ComposerControlsSlotItem>
+                  {routeKind === "draft" ? (
+                    composerAttachButton
+                  ) : (
+                    <ComposerControlsSlotItem item="attach">
+                    {composerAttachButton}
+                    </ComposerControlsSlotItem>
+                  )}
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
                     canOperateThread={canOperateThread}
