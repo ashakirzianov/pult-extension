@@ -157,3 +157,24 @@ html:not([data-theme-id]) .pult-thread-view {
 .pult-thread-view [data-chat-composer-actions="right"] {
   margin-inline-start: auto;
 }
+
+/* The composer and its send button: rounded rectangles of one radius. */
+.pult-thread-view [data-slot="composer-shell"]::before,
+.pult-thread-view [data-slot="composer-host"],
+.pult-thread-view [data-chat-composer-main-surface="true"],
+.pult-thread-view [data-chat-composer-surface="true"] {
+  border-radius: 8px;
+}
+
+.pult-thread-view [data-chat-composer-actions="right"] .rounded-full,
+.pult-thread-view [data-chat-composer-mobile-pending-actions="true"] .rounded-full {
+  border-radius: 8px;
+}
+
+.pult-thread-view [data-chat-composer-actions="right"] .rounded-full.rounded-r-none {
+  border-radius: 8px 0 0 8px;
+}
+
+.pult-thread-view [data-chat-composer-actions="right"] .rounded-full.rounded-l-none {
+  border-radius: 0 8px 8px 0;
+}
