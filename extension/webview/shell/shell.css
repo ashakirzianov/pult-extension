@@ -124,6 +124,12 @@ html:not([data-theme-id]) .pult-thread-view {
   display: none;
 }
 
+/* No composer, no bar: a thread the view renders read-only (a provider's
+   native subagent) mounts no composer, so nothing fills the bar. */
+.pult-thread-view > .pult-composer-bar:not(:has(> [data-chat-composer-slot-item]:not(:empty))) {
+  display: none;
+}
+
 /* Settings first, taking the room they measure their labels against; then
    a draft's environment and branch, the context window and attachments. */
 .pult-composer-bar > [data-chat-composer-slot-item="controls"] {
