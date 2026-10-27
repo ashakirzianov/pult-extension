@@ -8,9 +8,8 @@
 // and the vendored packages left to the shell's copies.
 import * as NodePath from "node:path";
 
-import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
-import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import react from "@vitejs/plugin-react";
 import { type BuildEnvironmentOptions, defineConfig, type Plugin } from "vite-plus";
 import { esmExternalRequirePlugin } from "vite/rolldown/plugins";
 
@@ -122,11 +121,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     stubs(mode === "shell" ? SHELL_STUBS : STUBS),
     inlineWorkers(),
-    react(),
-    babel({
-      parserOpts: { plugins: ["typescript", "jsx"] },
-      presets: [reactCompilerPreset()],
-    }),
+    react({ compiler: true }),
     tailwindcss(),
   ],
   define: Object.fromEntries(
@@ -137,4 +132,6 @@ export default defineConfig(({ mode }) => ({
     dedupe: ["react", "react-dom"],
   },
   build: mode === "shell" ? shellBuild : webviewBuild,
+  // Upstream's: the file viewers start module workers.
+  worker: { format: "es" },
 }));
