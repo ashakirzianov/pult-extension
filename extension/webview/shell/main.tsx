@@ -9,6 +9,7 @@ import "./shell.css";
 
 import vendoredCommit from "../../../vendor/t3code/COMMIT?raw";
 
+import { refreshTheme } from "../t3/src/hooks/useTheme";
 import { followColorScheme } from "../src/theme.ts";
 import { setThreadViewHost, type ThreadViewHost } from "./host.ts";
 import { routeRightPanel } from "./rightPanel.ts";
@@ -35,5 +36,7 @@ export function startThreadView(host: ThreadViewHost, workbench: Element) {
   followColorScheme(workbench, () =>
     ["vs-dark", "hc-black"].some((name) => workbench.classList.contains(name)),
   );
+  // Upstream applies its theme as its module loads, which is before this, by the browser's scheme.
+  refreshTheme();
   return { mount: mountThreadView, mountDraft: mountDraftView };
 }
