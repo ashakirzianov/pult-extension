@@ -70,7 +70,10 @@ export function ComposerBarNotices({
 }: {
   readonly items: ReadonlyArray<ComposerBannerStackItem>;
 }) {
-  const ordered = items.toSorted((a, b) => noticeRank(a) - noticeRank(b));
+  // The background work notice lists the thread's working subagents, which its card in the shell lists already.
+  const ordered = items
+    .filter((item) => !item.id.startsWith("background-work:"))
+    .toSorted((a, b) => noticeRank(a) - noticeRank(b));
   const front = ordered[0];
   if (front === undefined) return null;
   return (

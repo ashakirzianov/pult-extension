@@ -2217,8 +2217,14 @@ export default function ChatView(props: ChatViewProps) {
       expandedNoticesHeight,
     });
     if (composerTimelineInsetRef.current !== nextInset) {
+      // Pult: with a slot the composer is opaque, so a timeline at its end stays there as the composer's room grows.
+      const keepEnd =
+        composerControlsSlot !== null &&
+        nextInset > composerTimelineInsetRef.current &&
+        timelineLiveFollowEnabled;
       composerTimelineInsetRef.current = nextInset;
       setComposerTimelineInset(nextInset);
+      if (keepEnd) requestAnimationFrame(() => scrollToEnd(false));
     }
     // Reserve the expanded composer height for the terminal drawer and empty placeholder.
     // Keep it while the mobile strip collapses, but allow growth from approvals or tasks.
