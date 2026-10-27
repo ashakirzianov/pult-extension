@@ -6,6 +6,7 @@
 // `--mode shell` builds the same view for Pult's shell instead: `shell/main.tsx`
 // as a module the shell's page imports, into dist/shell/, with React, Effect
 // and the vendored packages left to the shell's copies.
+import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 import tailwindcss from "@tailwindcss/vite";
@@ -53,6 +54,18 @@ function inlineWorkers(): Plugin {
   };
 }
 
+/**
+ * The fork's release at the pin, which its release stamps on `contracts` as on
+ * its apps: the view reports it as its own, so upstream's version check
+ * compares like with like.
+ */
+const appVersion: string = JSON.parse(
+  NodeFS.readFileSync(
+    NodePath.join(webview, "../../vendor/t3code/packages/contracts/package.json"),
+    "utf8",
+  ),
+).version;
+
 // The fork's build-time configuration, all of it off: no T3 Connect, no hosted app.
 const env = {
   VITE_WS_URL: "",
@@ -66,7 +79,7 @@ const env = {
   VITE_RELAY_OTLP_TRACES_TOKEN: "",
   VITE_HOSTED_APP_URL: "",
   VITE_HOSTED_APP_CHANNEL: "",
-  APP_VERSION: "pult-extension",
+  APP_VERSION: appVersion,
 };
 
 /** The packages the shell's page holds one copy of, which its build imports rather than bundles. */
