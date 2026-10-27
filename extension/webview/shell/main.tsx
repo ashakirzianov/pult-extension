@@ -12,7 +12,7 @@ import vendoredCommit from "../../../vendor/t3code/COMMIT?raw";
 import { followColorScheme } from "../src/theme.ts";
 import { setThreadViewHost, type ThreadViewHost } from "./host.ts";
 import { routeRightPanel } from "./rightPanel.ts";
-import { mountThreadView } from "./ThreadView.tsx";
+import { mountDraftView, mountThreadView } from "./ThreadView.tsx";
 
 export type { ThreadViewHost } from "./host.ts";
 export type { ShellConnectionServices } from "./connectionRuntime.ts";
@@ -25,7 +25,7 @@ export const VENDORED_COMMIT = vendoredCommit.trim();
 
 /**
  * Starts the view on the shell's connection; call once, before any pane
- * mounts. The view follows the workbench's theme, as a thread tab follows
+ * mounts, then mount a thread or a project's draft per pane. The view follows the workbench's theme, as a thread tab follows
  * VS Code's (`../src/theme.ts`), and its files open in the shell
  * (`rightPanel.ts`).
  */
@@ -35,5 +35,5 @@ export function startThreadView(host: ThreadViewHost, workbench: Element) {
   followColorScheme(workbench, () =>
     ["vs-dark", "hc-black"].some((name) => workbench.classList.contains(name)),
   );
-  return { mount: mountThreadView };
+  return { mount: mountThreadView, mountDraft: mountDraftView };
 }
