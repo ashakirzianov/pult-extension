@@ -5,6 +5,7 @@ import { type AnyRouter, Outlet, RouterProvider, useRouter } from "@tanstack/rea
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { deriveProviderSubagentStatus } from "@t3tools/client-runtime/state/thread-execution";
 import { EnvironmentId, isOrchestrationV2WorkActive, ThreadId } from "@t3tools/contracts";
+import { DateTime } from "effect";
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -45,7 +46,8 @@ function followNavigation(router: AnyRouter, home: string, threadId: string) {
  * Reports the activity the mounted thread's projection knows to the shell:
  * each subagent of its roster that has a thread, and the thread itself when
  * it is a provider's native subagent, whose work is a runless turn the
- * thread list cannot see. Live, on the subscription the view holds anyway.
+ * thread list cannot see; each with when its work started. Live, on the
+ * subscription the view holds anyway.
  */
 function ActivityReporter({ environmentId, threadId }: { environmentId: string; threadId: string }) {
   const projection =
@@ -53,10 +55,20 @@ function ActivityReporter({ environmentId, threadId }: { environmentId: string; 
   useEffect(() => {
     if (projection === null) return;
     const activity = projection.subagents.flatMap((subagent) =>
-      subagent.childThreadId === null ? [] : [{ threadId: subagent.childThreadId, working: isOrchestrationV2WorkActive(subagent.status) }],
+      subagent.childThreadId === null
+        ? []
+        : [
+            {
+              threadId: subagent.childThreadId,
+              working: isOrchestrationV2WorkActive(subagent.status),
+              workingSince: subagent.startedAt === null ? null : DateTime.formatIso(subagent.startedAt),
+            },
+          ],
     );
     const own = deriveProviderSubagentStatus(projection);
-    if (own !== null) activity.push({ threadId: ThreadId.make(threadId), working: isOrchestrationV2WorkActive(own.status) });
+    if (own !== null) {
+      activity.push({ threadId: ThreadId.make(threadId), working: isOrchestrationV2WorkActive(own.status), workingSince: own.startedAt });
+    }
     threadViewHost().reportActivity(activity);
   }, [projection, threadId]);
   return null;

@@ -22,9 +22,12 @@ export interface ThreadViewHost {
   /**
    * Whether threads of the mounted thread's lineage are working, as its
    * projection knows them: its subagents' from its roster, its own when it is
-   * a provider's native subagent, whose work has no run the thread list sees.
+   * a provider's native subagent, whose work has no run the thread list sees;
+   * with when the work started, when known.
    */
-  readonly reportActivity: (activity: ReadonlyArray<{ readonly threadId: string; readonly working: boolean }>) => void;
+  readonly reportActivity: (
+    activity: ReadonlyArray<{ readonly threadId: string; readonly working: boolean; readonly workingSince: string | null }>,
+  ) => void;
 }
 
 let current: ThreadViewHost | undefined;

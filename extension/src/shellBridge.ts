@@ -1,4 +1,4 @@
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
+import { type EnvironmentThreadShell, resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
 import * as vscode from "vscode";
 
 import type { WindowConnection } from "./connection/service.ts";
@@ -41,6 +41,9 @@ export function shellBridge(connection: WindowConnection, model: ThreadsModel): 
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
         working: threadStatus(thread, now)?.badge === "R",
+        // Upstream's Waiting: stopped, its run held open by background work that will wake it.
+        waiting: thread.runtime?.status === "idle",
+        workingSince: resolveThreadWorkingStartedAt(thread),
         pinned: thread.pinnedAt !== null,
         latestRun:
           thread.latestRun === null
