@@ -16,7 +16,7 @@ import { shelve, threadStatus, type ShelfName } from "./threads/presentation.ts"
  * active, snoozed, settled, each in its shelf's order; then the subagents,
  * which upstream lists in their parent and the shell under the parent's card,
  * on no shelf, with their parent and root. Archived and deleted ones go
- * nowhere.
+ * nowhere. Then the environment's projects.
  */
 export function shellBridge(connection: WindowConnection, model: ThreadsModel): vscode.Disposable {
   if (vscode.env.appName !== "Pult") return { dispose: () => {} };
@@ -59,6 +59,13 @@ export function shellBridge(connection: WindowConnection, model: ThreadsModel): 
                 finishedAt: thread.latestRun.completedAt,
               },
         goal: thread.goal?.objective ?? null,
+      })),
+      // Every project, threads or none: the shell's draft of a new thread names its project.
+      projects: model.projects().map((project) => ({
+        id: project.id,
+        name: project.title,
+        root: project.workspaceRoot,
+        icon: project.projectIcon ?? null,
       })),
     };
     vscode.commands
