@@ -119,10 +119,11 @@ html:not([data-theme-id]) .pult-thread-view {
   font-size: 12px;
 }
 
+/* Its entries span the composer's column, the composer's edges theirs. */
 .pult-thread-view > .pult-composer-bar {
   flex: none;
   height: 40px;
-  padding: 0 12px;
+  padding: 0 max(12px, (100% - var(--chat-content-max-width)) / 2);
   background: var(--background);
 }
 
@@ -176,6 +177,11 @@ html:not([data-theme-id]) .pult-thread-view {
 :is(.pult-composer-bar, [data-chat-composer-draft-controls])
   > [data-chat-composer-slot-item="meter"] {
   order: 5;
+}
+
+:is(.pult-composer-bar, [data-chat-composer-draft-controls])
+  > [data-chat-composer-slot-item="actions"] {
+  order: 6;
 }
 
 /* A notice in the bar: its icon and title, how many more, then its actions. */
@@ -268,32 +274,17 @@ html:not([data-theme-id]) .pult-thread-view {
   display: none;
 }
 
-/* With its settings in the bar, the composer's footer holds the send button alone, at its end. */
-.pult-thread-view [data-chat-composer-actions="right"] {
-  margin-inline-start: auto;
-}
-
-/* Send at the end of the message, as while the composer rests: the footer
-   shares the message's row, and the composer is as tall as the message and
-   its padding, one line as tall as the resting composer (3rem), send centred
-   on the message's last line. Resting, upstream places the footer itself
-   (absolute, out of the grid), so these hold only while it is in flow. The
+/* With its settings and buttons in the bar, the composer is its message
+   alone: its emptied footer goes, and the message keeps upstream's padding
+   on both sides, one line as tall as the resting composer (3rem). The
    message's line is the editor's: leading-relaxed on the prompt's size. */
-.pult-thread-view [data-chat-composer-surface="true"] {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.pult-thread-view [data-chat-composer-surface="true"] > * {
-  grid-column: 1 / -1;
+.pult-thread-view [data-chat-composer-footer="true"]:not(:has(*)) {
+  display: none;
 }
 
 .pult-thread-view
   [data-chat-composer-surface="true"]:has(> [data-chat-composer-footer="true"]:not(.absolute))
   > [data-chat-composer-body="true"] {
-  grid-row: 1;
-  grid-column: 1;
-  padding-inline-end: 0;
   padding-block: calc((3rem - 1.625 * var(--font-size-prompt, var(--text-sm))) / 2);
 }
 
@@ -301,16 +292,7 @@ html:not([data-theme-id]) .pult-thread-view {
   [data-chat-composer-surface="true"]:has(> [data-chat-composer-footer="true"]:not(.absolute))
   > [data-chat-composer-body="true"]
   .composer-tiptap {
-  min-height: calc(2 * 1.625 * var(--font-size-prompt, var(--text-sm)));
-}
-
-.pult-thread-view
-  [data-chat-composer-surface="true"]
-  > [data-chat-composer-footer="true"]:not(.absolute) {
-  grid-row: 1;
-  grid-column: 2;
-  align-self: end;
-  padding-block: 0 0.5rem;
+  min-height: 0;
 }
 
 /* The composer and its send button: rounded rectangles of one radius. */
@@ -334,19 +316,13 @@ html:not([data-theme-id]) .pult-thread-view {
   border-radius: 0 8px 8px 0;
 }
 
-/* The composer's attach button above its send button, at the message's end:
-   two lines tall at least (above), a draft's three. */
+/* A draft's composer: three lines tall. */
 .pult-thread-view
   [data-chat-composer-stack]:has([data-chat-composer-draft-controls])
   [data-chat-composer-surface="true"]
   > [data-chat-composer-body="true"]
   .composer-tiptap {
   min-height: calc(3 * 1.625 * var(--font-size-prompt, var(--text-sm)));
-}
-
-.pult-thread-view [data-chat-composer-actions="right"] {
-  flex-direction: column;
-  gap: 4px;
 }
 
 /* The settings as plain labels: no picker shows its chevron, and reasoning
@@ -374,10 +350,10 @@ html:not([data-theme-id]) .pult-thread-view {
 
 /* The agent's side of the thread is as wide as the message typed in the
    composer below it: every lane but a user message's is inset by what the
-   composer has around its message (its 1px edge, its padding, and on the
-   end its send button), less the lane's own px-1. A user message keeps the
-   whole lane, its end at the composer's. */
+   composer has around its message (its 1px edge and its padding), less the
+   lane's own px-1. A user message keeps the whole lane, its end at the
+   composer's. */
 .pult-thread-view .chat-content-lane:not(:has(> [data-message-role="user"])),
 .pult-thread-view [data-chat-thread-status-line="true"] {
-  padding-inline: calc(1px + 0.75rem) calc(1px + 3.75rem);
+  padding-inline: calc(1px + 0.75rem);
 }

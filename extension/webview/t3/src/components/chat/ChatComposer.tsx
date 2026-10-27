@@ -114,7 +114,11 @@ import {
   type ComposerTasksProgress,
 } from "./ComposerTasksBadge";
 import { ComposerActivityRow } from "./ComposerActivityStatus";
-import { ComposerBarActivity, ComposerBarNotices } from "../../../../shell/ComposerBar";
+import {
+  ComposerBarActivity,
+  ComposerBarFormButtons,
+  ComposerBarNotices,
+} from "../../../../shell/ComposerBar";
 import {
   reconcileAttachmentContextReferences,
   useRetainedContextPayloads,
@@ -2320,8 +2324,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   };
   const toggleTasksDrawerStable = useStableCallback(toggleTasksDrawer);
   // Pult: with a slot, the notices, the sync row and the tasks render there, not above the composer.
-  const barHostsNotices = useContext(ComposerControlsSlot) !== null;
-  const hasBannerItems = !barHostsNotices && props.bannerItems.length > 0;
+  const controlsInSlot = useContext(ComposerControlsSlot) !== null;
+  const hasBannerItems = !controlsInSlot && props.bannerItems.length > 0;
   const hasBlockingComposerTopDrawer =
     activePendingApproval !== null || pendingUserInputs.length > 0;
   const showInlineTasksBadge =
@@ -2329,7 +2333,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activeTaskSteps !== null &&
     !isTasksDrawerOpen &&
     !hasBlockingComposerTopDrawer &&
-    !barHostsNotices &&
+    !controlsInSlot &&
     (hasBannerItems || showComposerTopDrawer || isComposerCollapsedMobile);
   const inlineTasksBadge = showInlineTasksBadge ? (
     <ComposerTasksBadge
@@ -2350,7 +2354,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   });
   const composerHasExpandedChrome =
     showComposerTopDrawer ||
-    (isTasksDrawerOpen && !barHostsNotices) ||
+    (isTasksDrawerOpen && !controlsInSlot) ||
     composerMenuOpen ||
     isStashMenuOpen ||
     isDragOverComposer ||
@@ -2599,7 +2603,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     />
   );
   const showTasksTab =
-    !barHostsNotices &&
+    !controlsInSlot &&
     !hasBannerItems &&
     !showComposerTopDrawer &&
     !isTasksDrawerOpen &&
@@ -3494,10 +3498,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           <ComposerBannerStack
             key={activeThreadId}
             className="relative z-0"
-            items={barHostsNotices ? [] : bannerStackItems}
+            items={controlsInSlot ? [] : bannerStackItems}
             attachedAbove={props.queuedRunsControl}
           />
-          {barHostsNotices ? (
+          {controlsInSlot ? (
             <>
               <ComposerControlsSlotItem item="activity">
                 <ComposerBarActivity
@@ -3513,7 +3517,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               </ComposerControlsSlotItem>
             </>
           ) : null}
-          {!barHostsNotices && !activityStackItem && (shownSyncPhase || inlineTasksBadge) ? (
+          {!controlsInSlot && !activityStackItem && (shownSyncPhase || inlineTasksBadge) ? (
             <ComposerBanner.Attachment>
               <ComposerBanner.Root data-chat-composer-activity-strip="true">
                 {shownSyncPhase ? <ComposerActivityRow phase={shownSyncPhase} /> : inlineTasksBadge}
@@ -3521,7 +3525,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             </ComposerBanner.Attachment>
           ) : null}
           {showComposerTopDrawer &&
-          (!isTasksDrawerOpen || hasBlockingComposerTopDrawer || barHostsNotices) ? (
+          (!isTasksDrawerOpen || hasBlockingComposerTopDrawer || controlsInSlot) ? (
             <ComposerBanner.Attachment>
               <ComposerBanner.Root
                 data-chat-composer-top-drawer="true"
@@ -3581,7 +3585,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               </ComposerBanner.Root>
             </ComposerBanner.Attachment>
           ) : null}
-          {!barHostsNotices &&
+          {!controlsInSlot &&
           !activityStackItem &&
           isTasksDrawerOpen &&
           !hasBlockingComposerTopDrawer &&
@@ -3906,6 +3910,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 </div>
                 </ComposerControlsSlotItem>
 
+                <ComposerControlsSlotItem item="actions">
+                <ComposerBarFormButtons form={composerFormRef}>
                 <div
                   ref={setRestingActionsElement}
                   data-chat-composer-actions="right"
@@ -3978,6 +3984,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       : {})}
                   />
                 </div>
+                </ComposerBarFormButtons>
+                </ComposerControlsSlotItem>
               </div>
             )}
             {showInlineRestingControls ? (

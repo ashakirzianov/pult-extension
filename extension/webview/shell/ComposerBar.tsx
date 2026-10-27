@@ -15,6 +15,7 @@ import type {
   ComposerTasksProgress,
 } from "../t3/src/components/chat/ComposerTasksBadge";
 import { Popover, PopoverPopup, PopoverTrigger } from "../t3/src/components/ui/popover";
+import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 
 /** Upstream's stack order: urgent, errors and warnings first, then activity, then the rest. */
 function noticeRank(item: ComposerBannerStackItem) {
@@ -168,5 +169,49 @@ export function ComposerBarActivity({
         />
       </PopoverPopup>
     </Popover>
+  );
+}
+
+let composerFormCount = 0;
+
+/**
+ * The composer's attach and send buttons, rendered in the bar, out of the
+ * composer's form: its submit buttons (send, and in its place a question's
+ * answer, Refine, Implement) name the form by its id, so they submit it
+ * still. The form gets an id of its own if it has none.
+ */
+export function ComposerBarFormButtons({
+  form,
+  children,
+}: {
+  readonly form: RefObject<HTMLFormElement | null>;
+  readonly children: ReactNode;
+}) {
+  const element = useRef<HTMLDivElement>(null);
+  // Passive: the form's ref, an ancestor's, is set after this subtree's layout effects.
+  useEffect(() => {
+    const container = element.current;
+    const target = form.current;
+    if (container === null || target === null) return;
+    if (target.id === "") target.id = `pult-composer-form-${(composerFormCount += 1)}`;
+    const link = () => {
+      for (const button of container.querySelectorAll("button[type=submit]")) {
+        if (button.getAttribute("form") !== target.id) button.setAttribute("form", target.id);
+      }
+    };
+    link();
+    const observer = new MutationObserver(link);
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["type"],
+    });
+    return () => observer.disconnect();
+  }, [form]);
+  return (
+    <div ref={element} className="contents">
+      {children}
+    </div>
   );
 }
