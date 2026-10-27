@@ -259,3 +259,9 @@ html:not([data-theme-id]) .pult-thread-view {
   flex-direction: column;
   gap: 4px;
 }
+
+/* The composer close above the composer bar: upstream's spacer under it,
+   room for a phone's safe area, is a small gap here. */
+.pult-thread-view [data-chat-composer-stack="true"] > * > [aria-hidden]:last-child {
+  height: 8px;
+}
