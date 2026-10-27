@@ -231,11 +231,13 @@ function escapeMarkdown(text: string): string {
   return text.replaceAll(/[\\`*_{}[\]()#+\-.!|<>]/g, "\\$&");
 }
 
-/** The thread a picker row or a tab's URI names, for commands that take either. */
+/** The thread a picker row, a tab's URI or a thread id (Pult's shell) names, for commands that take any. */
 export function threadFromArgument(
   model: ThreadsModel,
   argument: unknown,
 ): EnvironmentThreadShell | undefined {
+  // Pult's shell names a thread by its id.
+  if (typeof argument === "string") return model.thread(argument);
   if (argument instanceof vscode.Uri) {
     const resource = parseThreadUri(argument);
     return resource?.target.kind === "thread" && resource.environmentId === model.environmentId

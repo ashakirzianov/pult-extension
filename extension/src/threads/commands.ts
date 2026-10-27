@@ -32,6 +32,9 @@ const FEATURE_NAMES: Record<keyof ThreadFeatures, string> = {
   pinning: "pinning threads",
 };
 
+/** `pult.snoozeThread`'s wake argument that asks for a custom wake. */
+const CUSTOM_SNOOZE = "custom";
+
 // The thread commands mint their command ids with it.
 const webCrypto = Crypto.make({
   randomBytes: (size) => globalThis.crypto.getRandomValues(new Uint8Array(size)),
@@ -52,9 +55,12 @@ export function registerThreadCommands(connection: WindowConnection, model: Thre
     effect: Effect.Effect<A, E, EnvironmentSupervisor.EnvironmentSupervisor | Crypto.Crypto>,
   ) => connection.run(effect.pipe(Effect.provideService(Crypto.Crypto, webCrypto)));
   // A picker row passes the row and the selection; a tab menu, the tab's URI;
-  // the palette, nothing, for the active tab.
+  // Pult's shell, the thread's id; the palette, nothing, for the active tab.
   const thread = (argument: unknown) =>
     argument === undefined ? activeThread(model) : threadFromArgument(model, argument);
+  // Resolves to whether the action was carried out: false when it failed, or
+  // the user cancelled it (an action resolving to false), which Pult's shell
+  // reads to move its selection on after parking the selected thread.
   const withThread =
     (
       action: (
@@ -66,13 +72,14 @@ export function registerThreadCommands(connection: WindowConnection, model: Thre
       const target = thread(argument);
       if (target === undefined) {
         void vscode.window.showInformationMessage("Pult: open or select a thread first.");
-        return;
+        return false;
       }
       try {
-        await action(target, option);
+        return (await action(target, option)) !== false;
       } catch (error) {
         console.error(error);
         void vscode.window.showErrorMessage(`Pult: ${errorMessage(error)}`);
+        return false;
       }
     };
   // A server that does not advertise a feature never gets its commands
@@ -135,11 +142,18 @@ export function registerThreadCommands(connection: WindowConnection, model: Thre
     ),
     vscode.commands.registerCommand(
       "pult.snoozeThread",
-      // A wake time as the second argument skips the pick, for the headless load.
+      // A wake time as the second argument skips the pick (the headless load,
+      // and Pult's shell, whose menus offer the presets); "custom" goes
+      // straight to the custom wake's input box.
       withThread(
         gated("snooze", async (target, wake) => {
-          const snoozedUntil = typeof wake === "string" ? wake : await pickSnooze();
-          if (snoozedUntil === undefined) return;
+          const snoozedUntil =
+            wake === CUSTOM_SNOOZE
+              ? await customSnooze()
+              : typeof wake === "string"
+                ? wake
+                : await pickSnooze();
+          if (snoozedUntil === undefined) return false;
           await run(snoozeThread({ ...command({ threadId: target.id }), snoozedUntil }));
         }),
       ),
@@ -244,6 +258,11 @@ async function pickSnooze(): Promise<string | undefined> {
     { placeHolder: "Snooze until" },
   );
   if (picked === undefined || picked.snoozedUntil !== undefined) return picked?.snoozedUntil;
+  return customSnooze();
+}
+
+/** A custom wake, typed: a duration or a local time. */
+async function customSnooze(): Promise<string | undefined> {
   const text = await vscode.window.showInputBox({
     title: "Snooze until",
     prompt: "A duration such as 45m, 2h or 3d, or a local time such as 2026-10-20 09:00",
