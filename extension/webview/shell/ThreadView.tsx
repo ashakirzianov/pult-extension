@@ -15,7 +15,7 @@ import { DateTime } from "effect";
 import { type ReactNode, StrictMode, useEffect, useRef, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 
-import { ComposerControlsSlot } from "../t3/src/components/chat/ChatComposer";
+import { ComposerControlsSlot } from "../t3/src/components/chat/ComposerFooterControls";
 import { ConfirmDialogHost } from "../t3/src/components/ConfirmDialogHost";
 import { CustomSnoozeDialogHost } from "../t3/src/components/CustomSnoozeDialog";
 import { SidebarProvider } from "../t3/src/components/ui/sidebar";
