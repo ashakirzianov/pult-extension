@@ -1,6 +1,6 @@
 ---
 track: pult
-label: repo:pult-extension
+codebase-url: https://github.com/ashakirzianov/pult-extension
 ---
 
 # Pult extension
